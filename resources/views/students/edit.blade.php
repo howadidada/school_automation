@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -88,25 +89,36 @@
             padding: 30px;
         }
 
-        .page-header {
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             margin-bottom: 25px;
         }
 
-        .page-header h2 {
+        .topbar h2 {
             font-size: 26px;
             margin-bottom: 6px;
         }
 
-        .page-header p {
+        .topbar p {
             color: #6b7280;
         }
 
+        .back-btn {
+            background: #e5e7eb;
+            color: #1f2937;
+            text-decoration: none;
+            padding: 11px 18px;
+            border-radius: 9px;
+        }
+
         .form-box {
-            max-width: 850px;
+            max-width: 900px;
             background: white;
             border-radius: 15px;
             padding: 25px;
-            box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
         }
 
         .form-grid {
@@ -121,7 +133,7 @@
             gap: 7px;
         }
 
-        .form-group.full {
+        .full {
             grid-column: 1 / -1;
         }
 
@@ -138,6 +150,7 @@
             border-radius: 8px;
             outline: none;
             background: white;
+            font-size: 14px;
         }
 
         input:focus,
@@ -172,6 +185,11 @@
             padding-right: 18px;
         }
 
+        .hint {
+            color: #6b7280;
+            font-size: 12px;
+        }
+
         .buttons {
             display: flex;
             gap: 10px;
@@ -196,12 +214,20 @@
         }
 
         @media (max-width: 800px) {
+            .layout {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+            }
+
             .form-grid {
                 grid-template-columns: 1fr;
             }
 
-            .sidebar {
-                width: 220px;
+            .full {
+                grid-column: auto;
             }
         }
     </style>
@@ -215,26 +241,41 @@
 
     <main class="main">
 
-        <div class="page-header">
-            <h2>تعديل بيانات الطالب</h2>
-            <p>تعديل بيانات الطالب وحسابه والشعبة المرتبط بها</p>
+        <div class="topbar">
+
+            <div>
+                <h2>تعديل بيانات الطالب</h2>
+                <p>تعديل بيانات الطالب وحسابه والشعبة المرتبط بها</p>
+            </div>
+
+            <a
+                href="{{ route('students.index') }}"
+                class="back-btn"
+            >
+                العودة للطلاب
+            </a>
+
         </div>
+
+        @if ($errors->any())
+
+            <div class="errors">
+                <ul>
+
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+
+                </ul>
+            </div>
+
+        @endif
 
         <div class="form-box">
 
             <div class="info">
                 رقم الطالب يتم إنشاؤه تلقائيًا بواسطة النظام ولا يمكن تعديله.
             </div>
-
-            @if ($errors->any())
-                <div class="errors">
-                    <ul>
-                        @foreach ($errors->all() as $error)
-                            <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
-                </div>
-            @endif
 
             <form
                 method="POST"
@@ -246,8 +287,12 @@
 
                 <div class="form-grid">
 
+                    {{-- رقم الطالب --}}
                     <div class="form-group">
-                        <label>رقم الطالب</label>
+
+                        <label>
+                            رقم الطالب
+                        </label>
 
                         <input
                             type="text"
@@ -255,10 +300,15 @@
                             class="readonly-input"
                             readonly
                         >
+
                     </div>
 
+                    {{-- اسم الطالب --}}
                     <div class="form-group">
-                        <label for="name">اسم الطالب</label>
+
+                        <label for="name">
+                            اسم الطالب
+                        </label>
 
                         <input
                             type="text"
@@ -267,10 +317,15 @@
                             value="{{ old('name', $student->user?->name) }}"
                             required
                         >
+
                     </div>
 
+                    {{-- البريد الإلكتروني --}}
                     <div class="form-group">
-                        <label for="email">البريد الإلكتروني</label>
+
+                        <label for="email">
+                            البريد الإلكتروني
+                        </label>
 
                         <input
                             type="email"
@@ -279,10 +334,15 @@
                             value="{{ old('email', $student->user?->email) }}"
                             required
                         >
+
                     </div>
 
+                    {{-- رقم الهاتف --}}
                     <div class="form-group">
-                        <label for="phone">رقم الهاتف</label>
+
+                        <label for="phone">
+                            رقم الهاتف
+                        </label>
 
                         <input
                             type="text"
@@ -290,10 +350,15 @@
                             name="phone"
                             value="{{ old('phone', $student->user?->phone) }}"
                         >
+
                     </div>
 
+                    {{-- الشعبة --}}
                     <div class="form-group">
-                        <label for="section_id">الشعبة</label>
+
+                        <label for="section_id">
+                            الشعبة
+                        </label>
 
                         <select
                             id="section_id"
@@ -313,15 +378,72 @@
                                 >
                                     {{ $section->schoolClass?->name ?? '-' }}
                                     -
-                                    {{ $section->name }}
+                                    الشعبة {{ $section->name }}
                                 </option>
 
                             @endforeach
 
                         </select>
+
                     </div>
 
+                    {{-- الجنس --}}
                     <div class="form-group">
+
+                        <label for="gender">
+                            الجنس
+                        </label>
+
+                        <select
+                            id="gender"
+                            name="gender"
+                        >
+
+                            <option value="">
+                                اختر الجنس
+                            </option>
+
+                            <option
+                                value="male"
+                                {{ old('gender', $student->gender) === 'male' ? 'selected' : '' }}
+                            >
+                                ذكر
+                            </option>
+
+                            <option
+                                value="female"
+                                {{ old('gender', $student->gender) === 'female' ? 'selected' : '' }}
+                            >
+                                أنثى
+                            </option>
+
+                        </select>
+
+                        <span class="hint">
+                            إذا لم يكن الجنس مسجلًا سابقًا يمكنك تحديده الآن.
+                        </span>
+
+                    </div>
+
+                    {{-- تاريخ الميلاد --}}
+                    <div class="form-group full">
+
+                        <label for="date_of_birth">
+                            تاريخ الميلاد
+                        </label>
+
+                        <input
+                            type="date"
+                            id="date_of_birth"
+                            name="date_of_birth"
+                            value="{{ old('date_of_birth', $student->date_of_birth ? substr((string) $student->date_of_birth, 0, 10) : '') }}"
+                        >
+
+                    </div>
+
+                    {{-- كلمة المرور --}}
+                    <div class="form-group">
+
                         <label for="password">
                             كلمة المرور الجديدة
                         </label>
@@ -330,10 +452,18 @@
                             type="password"
                             id="password"
                             name="password"
+                            autocomplete="new-password"
                         >
+
+                        <span class="hint">
+                            اتركها فارغة إذا لم ترغب في تغيير كلمة المرور.
+                        </span>
+
                     </div>
 
+                    {{-- تأكيد كلمة المرور --}}
                     <div class="form-group">
+
                         <label for="password_confirmation">
                             تأكيد كلمة المرور الجديدة
                         </label>
@@ -342,14 +472,19 @@
                             type="password"
                             id="password_confirmation"
                             name="password_confirmation"
+                            autocomplete="new-password"
                         >
+
                     </div>
 
                 </div>
 
                 <div class="buttons">
 
-                    <button type="submit" class="save-btn">
+                    <button
+                        type="submit"
+                        class="save-btn"
+                    >
                         حفظ التعديلات
                     </button>
 

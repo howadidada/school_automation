@@ -13,6 +13,7 @@ use App\Http\Controllers\TeacherController;
 use App\Http\Controllers\ParentController;
 use App\Http\Controllers\TeacherAssignmentController;
 use App\Http\Controllers\ScheduleFileController;
+use App\Http\Controllers\AttendanceController;
 
 Route::get('/', function () {
     return redirect()->route('login');
@@ -33,6 +34,9 @@ Route::get('/dashboard', [DashboardController::class, 'index'])
 
 Route::middleware('auth')->group(function () {
 
+    // ===============================================================
+    // إدارة المستخدمين
+    // ===============================================================
     Route::middleware('permission:إدارة المستخدمين')->group(function () {
 
         Route::get('/users', [UserController::class, 'index'])
@@ -57,6 +61,9 @@ Route::middleware('auth')->group(function () {
     });
 
 
+    // ===============================================================
+    // الأدوار والصلاحيات
+    // ===============================================================
     Route::middleware('permission:إدارة الأدوار والصلاحيات')->group(function () {
 
         Route::get('/roles', [RoleController::class, 'index'])
@@ -79,6 +86,9 @@ Route::middleware('auth')->group(function () {
     });
 
 
+    // ===============================================================
+    // الطلاب
+    // ===============================================================
     Route::middleware('permission:إدارة الطلاب')->group(function () {
 
         Route::get('/students', [StudentController::class, 'index'])
@@ -101,6 +111,9 @@ Route::middleware('auth')->group(function () {
     });
 
 
+    // ===============================================================
+    // المعلمين
+    // ===============================================================
     Route::middleware('permission:إدارة المعلمين')->group(function () {
 
         Route::get('/teachers', [TeacherController::class, 'index'])
@@ -123,6 +136,9 @@ Route::middleware('auth')->group(function () {
     });
 
 
+    // ===============================================================
+    // أولياء الأمور
+    // ===============================================================
     Route::middleware('permission:إدارة أولياء الأمور')->group(function () {
 
         Route::get('/parents', [ParentController::class, 'index'])
@@ -145,6 +161,9 @@ Route::middleware('auth')->group(function () {
     });
 
 
+    // ===============================================================
+    // الفصول والشعب
+    // ===============================================================
     Route::middleware('permission:إدارة الفصول والشعب')->group(function () {
 
         Route::get('/classes', [SchoolClassController::class, 'index'])
@@ -186,6 +205,9 @@ Route::middleware('auth')->group(function () {
     });
 
 
+    // ===============================================================
+    // المواد الدراسية
+    // ===============================================================
     Route::middleware('permission:إدارة المواد الدراسية')->group(function () {
 
         Route::get('/subjects', [SubjectController::class, 'index'])
@@ -208,6 +230,9 @@ Route::middleware('auth')->group(function () {
     });
 
 
+    // ===============================================================
+    // إسناد المعلمين
+    // ===============================================================
     Route::middleware('permission:إسناد المعلمين')->group(function () {
 
         Route::get(
@@ -242,6 +267,9 @@ Route::middleware('auth')->group(function () {
     });
 
 
+    // ===============================================================
+    // رفع الجدول الدراسي
+    // ===============================================================
     Route::middleware('permission:رفع الجدول الدراسي')->group(function () {
 
         Route::get(
@@ -279,5 +307,19 @@ Route::middleware('auth')->group(function () {
             [ScheduleFileController::class, 'destroy']
         )->name('schedule-files.destroy');
     });
+
+
+    // ===============================================================
+    // تسجيل الحضور
+    // ===============================================================
+    Route::get(
+        '/attendances',
+        [AttendanceController::class, 'index']
+    )->name('attendances.index');
+
+    Route::post(
+        '/attendances',
+        [AttendanceController::class, 'store']
+    )->name('attendances.store');
 
 });

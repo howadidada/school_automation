@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>صلة | إضافة معلم</title>
 
     <style>
@@ -148,11 +150,18 @@
             border-radius: 8px;
             outline: none;
             font-size: 14px;
+            background: white;
         }
 
         input:focus,
         select:focus {
             border-color: #4f46e5;
+        }
+
+        .hint {
+            color: #6b7280;
+            font-size: 12px;
+            line-height: 1.5;
         }
 
         .save-btn {
@@ -164,6 +173,10 @@
             border-radius: 9px;
             cursor: pointer;
             font-size: 14px;
+        }
+
+        .save-btn:hover {
+            background: #1f2937;
         }
 
         .errors {
@@ -210,35 +223,61 @@
 
             <div>
                 <h2>إضافة معلم</h2>
-                <p>إضافة بيانات المعلم وتحديد المادة الدراسية الخاصة به</p>
+
+                <p>
+                    إضافة بيانات المعلم وحساب تسجيل الدخول والمرحلة التعليمية
+                </p>
             </div>
 
-            <a href="{{ route('teachers.index') }}" class="back-btn">
+            <a
+                href="{{ route('teachers.index') }}"
+                class="back-btn"
+            >
                 العودة للمعلمين
             </a>
 
         </div>
 
         @if($errors->any())
+
             <div class="errors">
+
                 <ul>
+
                     @foreach($errors->all() as $error)
-                        <li>{{ $error }}</li>
+
+                        <li>
+                            {{ $error }}
+                        </li>
+
                     @endforeach
+
                 </ul>
+
             </div>
+
         @endif
 
         <div class="form-box">
 
-            <form method="POST" action="{{ route('teachers.store') }}">
+            <form
+                method="POST"
+                action="{{ route('teachers.store') }}"
+            >
 
                 @csrf
 
                 <div class="form-grid">
 
+                    {{-- ================================================= --}}
+                    {{-- اسم المعلم --}}
+                    {{-- ================================================= --}}
+
                     <div class="form-group">
-                        <label for="name">اسم المعلم</label>
+
+                        <label for="name">
+                            اسم المعلم
+                        </label>
 
                         <input
                             type="text"
@@ -247,10 +286,44 @@
                             value="{{ old('name') }}"
                             required
                         >
+
                     </div>
 
+                    {{-- ================================================= --}}
+                    {{-- اسم المستخدم --}}
+                    {{-- ================================================= --}}
+
                     <div class="form-group">
-                        <label for="email">البريد الإلكتروني</label>
+
+                        <label for="username">
+                            اسم المستخدم
+                        </label>
+
+                        <input
+                            type="text"
+                            id="username"
+                            name="username"
+                            value="{{ old('username') }}"
+                            placeholder="مثال: sara"
+                            autocomplete="off"
+                            required
+                        >
+
+                        <span class="hint">
+                            يستخدم المعلم هذا الاسم لتسجيل الدخول إلى التطبيق.
+                        </span>
+
+                    </div>
+
+                    {{-- ================================================= --}}
+                    {{-- البريد الإلكتروني --}}
+                    {{-- ================================================= --}}
+
+                    <div class="form-group">
+
+                        <label for="email">
+                            البريد الإلكتروني
+                        </label>
 
                         <input
                             type="email"
@@ -259,10 +332,18 @@
                             value="{{ old('email') }}"
                             required
                         >
+
                     </div>
 
+                    {{-- ================================================= --}}
+                    {{-- رقم الهاتف --}}
+                    {{-- ================================================= --}}
+
                     <div class="form-group">
-                        <label for="phone">رقم الهاتف</label>
+
+                        <label for="phone">
+                            رقم الهاتف
+                        </label>
 
                         <input
                             type="text"
@@ -270,32 +351,98 @@
                             name="phone"
                             value="{{ old('phone') }}"
                         >
+
                     </div>
 
+                    {{-- ================================================= --}}
+                    {{-- المادة الدراسية --}}
+                    {{-- ================================================= --}}
+
                     <div class="form-group">
-                        <label for="subject_id">المادة الدراسية</label>
+
+                        <label for="subject_id">
+                            المادة الدراسية
+                        </label>
 
                         <select
                             id="subject_id"
                             name="subject_id"
                             required
                         >
-                            <option value="">اختر المادة</option>
+
+                            <option value="">
+                                اختر المادة
+                            </option>
 
                             @foreach($subjects as $subject)
+
                                 <option
                                     value="{{ $subject->id }}"
                                     {{ old('subject_id') == $subject->id ? 'selected' : '' }}
                                 >
                                     {{ $subject->name }}
                                 </option>
+
                             @endforeach
 
                         </select>
+
                     </div>
 
+                    {{-- ================================================= --}}
+                    {{-- المرحلة التعليمية --}}
+                    {{-- ================================================= --}}
+
+                    <div class="form-group">
+
+                        <label for="education_stage">
+                            المرحلة التعليمية
+                        </label>
+
+                        <select
+                            id="education_stage"
+                            name="education_stage"
+                            required
+                        >
+
+                            <option value="">
+                                اختر المرحلة التعليمية
+                            </option>
+
+                            <option
+                                value="primary"
+                                {{ old('education_stage') === 'primary' ? 'selected' : '' }}
+                            >
+                                المرحلة الابتدائية
+                            </option>
+
+                            <option
+                                value="middle"
+                                {{ old('education_stage') === 'middle' ? 'selected' : '' }}
+                            >
+                                المرحلة المتوسطة / الإعدادية
+                            </option>
+
+                            <option
+                                value="secondary"
+                                {{ old('education_stage') === 'secondary' ? 'selected' : '' }}
+                            >
+                                المرحلة الثانوية
+                            </option>
+
+                        </select>
+
+                    </div>
+
+                    {{-- ================================================= --}}
+                    {{-- التخصص --}}
+                    {{-- ================================================= --}}
+
                     <div class="form-group full">
-                        <label for="specialization">التخصص</label>
+
+                        <label for="specialization">
+                            التخصص
+                        </label>
 
                         <input
                             type="text"
@@ -303,33 +450,59 @@
                             name="specialization"
                             value="{{ old('specialization') }}"
                         >
+
                     </div>
 
+                    {{-- ================================================= --}}
+                    {{-- كلمة المرور --}}
+                    {{-- ================================================= --}}
+
                     <div class="form-group">
-                        <label for="password">كلمة المرور</label>
+
+                        <label for="password">
+                            كلمة المرور
+                        </label>
 
                         <input
                             type="password"
                             id="password"
                             name="password"
+                            autocomplete="new-password"
                             required
                         >
+
+                        <span class="hint">
+                            يجب أن تكون كلمة المرور 8 أحرف أو أرقام على الأقل.
+                        </span>
+
                     </div>
 
+                    {{-- ================================================= --}}
+                    {{-- تأكيد كلمة المرور --}}
+                    {{-- ================================================= --}}
+
                     <div class="form-group">
-                        <label for="password_confirmation">تأكيد كلمة المرور</label>
+
+                        <label for="password_confirmation">
+                            تأكيد كلمة المرور
+                        </label>
 
                         <input
                             type="password"
                             id="password_confirmation"
                             name="password_confirmation"
+                            autocomplete="new-password"
                             required
                         >
+
                     </div>
 
                 </div>
 
-                <button type="submit" class="save-btn">
+                <button
+                    type="submit"
+                    class="save-btn"
+                >
                     حفظ المعلم
                 </button>
 

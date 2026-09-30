@@ -12,6 +12,7 @@ class TeacherAssignment extends Model
     protected $fillable = [
         'teacher_id',
         'section_id',
+        'subject_id',
     ];
 
     /**
@@ -28,5 +29,13 @@ class TeacherAssignment extends Model
     public function section()
     {
         return $this->belongsTo(Section::class);
+    }
+
+    /**
+     * المادة المرتبطة بهذا الإسناد.
+     */
+    public function subject()
+    {
+        return $this->belongsTo(Subject::class);
     }
 }

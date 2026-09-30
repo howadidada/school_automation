@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>صلة | تعديل المعلم</title>
 
     <style>
@@ -148,6 +150,7 @@
             border-radius: 8px;
             outline: none;
             font-size: 14px;
+            background: white;
         }
 
         input:focus,
@@ -166,6 +169,10 @@
             font-size: 14px;
         }
 
+        .save-btn:hover {
+            background: #1f2937;
+        }
+
         .errors {
             background: #fee2e2;
             color: #991b1b;
@@ -181,6 +188,7 @@
         .hint {
             color: #6b7280;
             font-size: 12px;
+            line-height: 1.5;
         }
 
         @media (max-width: 900px) {
@@ -215,36 +223,66 @@
 
             <div>
                 <h2>تعديل المعلم</h2>
-                <p>تعديل بيانات المعلم والمادة الدراسية الخاصة به</p>
+
+                <p>
+                    تعديل بيانات المعلم وحساب تسجيل الدخول والمرحلة التعليمية
+                </p>
             </div>
 
-            <a href="{{ route('teachers.index') }}" class="back-btn">
+            <a
+                href="{{ route('teachers.index') }}"
+                class="back-btn"
+            >
                 العودة للمعلمين
             </a>
 
         </div>
 
+        {{-- ===================================================== --}}
+        {{-- أخطاء التحقق --}}
+        {{-- ===================================================== --}}
+
         @if($errors->any())
+
             <div class="errors">
+
                 <ul>
+
                     @foreach($errors->all() as $error)
-                        <li>{{ $error }}</li>
+
+                        <li>
+                            {{ $error }}
+                        </li>
+
                     @endforeach
+
                 </ul>
+
             </div>
+
         @endif
 
         <div class="form-box">
 
-            <form method="POST" action="{{ route('teachers.update', $teacher) }}">
+            <form
+                method="POST"
+                action="{{ route('teachers.update', $teacher) }}"
+            >
 
                 @csrf
                 @method('PUT')
 
                 <div class="form-grid">
 
+                    {{-- ================================================= --}}
+                    {{-- اسم المعلم --}}
+                    {{-- ================================================= --}}
+
                     <div class="form-group">
-                        <label for="name">اسم المعلم</label>
+
+                        <label for="name">
+                            اسم المعلم
+                        </label>
 
                         <input
                             type="text"
@@ -253,10 +291,43 @@
                             value="{{ old('name', $teacher->user->name) }}"
                             required
                         >
+
                     </div>
 
+                    {{-- ================================================= --}}
+                    {{-- اسم المستخدم --}}
+                    {{-- ================================================= --}}
+
                     <div class="form-group">
-                        <label for="email">البريد الإلكتروني</label>
+
+                        <label for="username">
+                            اسم المستخدم
+                        </label>
+
+                        <input
+                            type="text"
+                            id="username"
+                            name="username"
+                            value="{{ old('username', $teacher->user->username) }}"
+                            autocomplete="off"
+                            required
+                        >
+
+                        <span class="hint">
+                            يستخدم المعلم هذا الاسم لتسجيل الدخول إلى التطبيق.
+                        </span>
+
+                    </div>
+
+                    {{-- ================================================= --}}
+                    {{-- البريد الإلكتروني --}}
+                    {{-- ================================================= --}}
+
+                    <div class="form-group">
+
+                        <label for="email">
+                            البريد الإلكتروني
+                        </label>
 
                         <input
                             type="email"
@@ -265,10 +336,18 @@
                             value="{{ old('email', $teacher->user->email) }}"
                             required
                         >
+
                     </div>
 
+                    {{-- ================================================= --}}
+                    {{-- رقم الهاتف --}}
+                    {{-- ================================================= --}}
+
                     <div class="form-group">
-                        <label for="phone">رقم الهاتف</label>
+
+                        <label for="phone">
+                            رقم الهاتف
+                        </label>
 
                         <input
                             type="text"
@@ -276,32 +355,98 @@
                             name="phone"
                             value="{{ old('phone', $teacher->user->phone) }}"
                         >
+
                     </div>
 
+                    {{-- ================================================= --}}
+                    {{-- المادة الدراسية --}}
+                    {{-- ================================================= --}}
+
                     <div class="form-group">
-                        <label for="subject_id">المادة الدراسية</label>
+
+                        <label for="subject_id">
+                            المادة الدراسية
+                        </label>
 
                         <select
                             id="subject_id"
                             name="subject_id"
                             required
                         >
-                            <option value="">اختر المادة</option>
+
+                            <option value="">
+                                اختر المادة
+                            </option>
 
                             @foreach($subjects as $subject)
+
                                 <option
                                     value="{{ $subject->id }}"
                                     {{ old('subject_id', $teacher->subject_id) == $subject->id ? 'selected' : '' }}
                                 >
                                     {{ $subject->name }}
                                 </option>
+
                             @endforeach
 
                         </select>
+
                     </div>
 
+                    {{-- ================================================= --}}
+                    {{-- المرحلة التعليمية --}}
+                    {{-- ================================================= --}}
+
+                    <div class="form-group">
+
+                        <label for="education_stage">
+                            المرحلة التعليمية
+                        </label>
+
+                        <select
+                            id="education_stage"
+                            name="education_stage"
+                            required
+                        >
+
+                            <option value="">
+                                اختر المرحلة التعليمية
+                            </option>
+
+                            <option
+                                value="primary"
+                                {{ old('education_stage', $teacher->education_stage) === 'primary' ? 'selected' : '' }}
+                            >
+                                المرحلة الابتدائية
+                            </option>
+
+                            <option
+                                value="middle"
+                                {{ old('education_stage', $teacher->education_stage) === 'middle' ? 'selected' : '' }}
+                            >
+                                المرحلة المتوسطة / الإعدادية
+                            </option>
+
+                            <option
+                                value="secondary"
+                                {{ old('education_stage', $teacher->education_stage) === 'secondary' ? 'selected' : '' }}
+                            >
+                                المرحلة الثانوية
+                            </option>
+
+                        </select>
+
+                    </div>
+
+                    {{-- ================================================= --}}
+                    {{-- التخصص --}}
+                    {{-- ================================================= --}}
+
                     <div class="form-group full">
-                        <label for="specialization">التخصص</label>
+
+                        <label for="specialization">
+                            التخصص
+                        </label>
 
                         <input
                             type="text"
@@ -309,35 +454,61 @@
                             name="specialization"
                             value="{{ old('specialization', $teacher->specialization) }}"
                         >
+
                     </div>
 
+                    {{-- ================================================= --}}
+                    {{-- كلمة المرور الجديدة --}}
+                    {{-- ================================================= --}}
+
                     <div class="form-group">
-                        <label for="password">كلمة المرور الجديدة</label>
+
+                        <label for="password">
+                            كلمة المرور الجديدة
+                        </label>
 
                         <input
                             type="password"
                             id="password"
                             name="password"
+                            autocomplete="new-password"
                         >
 
                         <span class="hint">
                             اتركها فارغة إذا لم ترغب في تغيير كلمة المرور.
                         </span>
+
                     </div>
 
+                    {{-- ================================================= --}}
+                    {{-- تأكيد كلمة المرور الجديدة --}}
+                    {{-- ================================================= --}}
+
                     <div class="form-group">
-                        <label for="password_confirmation">تأكيد كلمة المرور الجديدة</label>
+
+                        <label for="password_confirmation">
+                            تأكيد كلمة المرور الجديدة
+                        </label>
 
                         <input
                             type="password"
                             id="password_confirmation"
                             name="password_confirmation"
+                            autocomplete="new-password"
                         >
+
                     </div>
 
                 </div>
 
-                <button type="submit" class="save-btn">
+                {{-- ================================================= --}}
+                {{-- حفظ التعديلات --}}
+                {{-- ================================================= --}}
+
+                <button
+                    type="submit"
+                    class="save-btn"
+                >
                     حفظ التعديلات
                 </button>
 

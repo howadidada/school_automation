@@ -16,6 +16,13 @@
             الرئيسية
         </a>
 
+        <a
+            href="{{ route('attendances.index') }}"
+            class="menu-item {{ request()->routeIs('attendances.*') ? 'active' : '' }}"
+        >
+            تسجيل الحضور
+        </a>
+
         @if(auth()->user()->hasPermission('إدارة المستخدمين'))
             <a
                 href="{{ route('users.index') }}"

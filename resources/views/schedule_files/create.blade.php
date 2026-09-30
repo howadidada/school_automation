@@ -141,7 +141,8 @@
             font-weight: 600;
         }
 
-        input {
+        input,
+        select {
             width: 100%;
             padding: 11px 12px;
             border: 1px solid #d1d5db;
@@ -151,7 +152,8 @@
             background: white;
         }
 
-        input:focus {
+        input:focus,
+        select:focus {
             border-color: #4f46e5;
         }
 
@@ -208,7 +210,7 @@
 
             <div>
                 <h2>رفع ملف الجدول الدراسي</h2>
-                <p>رفع الجدول الدراسي الجاهز إلى النظام</p>
+                <p>رفع الجدول الدراسي الجاهز وتحديد الشعبة الخاصة به</p>
             </div>
 
             <a href="{{ route('schedule-files.index') }}" class="back-btn">
@@ -229,7 +231,7 @@
 
         <div class="info-box">
             يتم رفع ملف الجدول الدراسي الجاهز فقط.
-            النظام لا يقوم بإنشاء الجدول الدراسي من الصفر.
+            اختر الفصل والشعبة التي سيتم ربط الجدول بها.
         </div>
 
         <div class="form-box">
@@ -256,6 +258,40 @@
                         placeholder="مثال: الجدول الدراسي للفصل الأول"
                         required
                     >
+
+                </div>
+
+                <div class="form-group">
+
+                    <label for="section_id">
+                        الفصل والشعبة
+                    </label>
+
+                    <select
+                        id="section_id"
+                        name="section_id"
+                        required
+                    >
+                        <option value="">
+                            اختر الفصل والشعبة
+                        </option>
+
+                        @foreach($sections as $section)
+                            <option
+                                value="{{ $section->id }}"
+                                {{ old('section_id') == $section->id ? 'selected' : '' }}
+                            >
+                                {{ $section->schoolClass?->name ?? 'فصل غير محدد' }}
+                                —
+                                شعبة {{ $section->name }}
+                            </option>
+                        @endforeach
+
+                    </select>
+
+                    <span class="hint">
+                        اختر الشعبة التي سيظهر لها هذا الجدول الدراسي.
+                    </span>
 
                 </div>
 

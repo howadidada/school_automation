@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ScheduleFile;
+use App\Models\Section;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -10,7 +11,10 @@ class ScheduleFileController extends Controller
 {
     public function index()
     {
-        $scheduleFiles = ScheduleFile::with('uploader')
+        $scheduleFiles = ScheduleFile::with([
+            'uploader',
+            'section.schoolClass'
+        ])
             ->latest()
             ->get();
 
@@ -19,13 +23,27 @@ class ScheduleFileController extends Controller
 
     public function create()
     {
-        return view('schedule_files.create');
+        $sections = Section::with('schoolClass')
+            ->orderBy('school_class_id')
+            ->orderBy('name')
+            ->get();
+
+        return view(
+            'schedule_files.create',
+            compact('sections')
+        );
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
+
+            'section_id' => [
+                'required',
+                'integer',
+                'exists:sections,id',
+            ],
 
             'file' => [
                 'required',
@@ -41,6 +59,7 @@ class ScheduleFileController extends Controller
         ScheduleFile::create([
             'title' => $validated['title'],
             'file_path' => $path,
+            'section_id' => $validated['section_id'],
             'uploaded_by' => auth()->id(),
         ]);
 
@@ -65,9 +84,14 @@ class ScheduleFileController extends Controller
 
     public function edit(ScheduleFile $scheduleFile)
     {
+        $sections = Section::with('schoolClass')
+            ->orderBy('school_class_id')
+            ->orderBy('name')
+            ->get();
+
         return view(
             'schedule_files.edit',
-            compact('scheduleFile')
+            compact('scheduleFile', 'sections')
         );
     }
 
@@ -75,6 +99,12 @@ class ScheduleFileController extends Controller
     {
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
+
+            'section_id' => [
+                'required',
+                'integer',
+                'exists:sections,id',
+            ],
 
             'file' => [
                 'nullable',
@@ -85,6 +115,7 @@ class ScheduleFileController extends Controller
         ]);
 
         $scheduleFile->title = $validated['title'];
+        $scheduleFile->section_id = $validated['section_id'];
 
         if ($request->hasFile('file')) {
 

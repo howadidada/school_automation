@@ -12,6 +12,7 @@ class ScheduleFile extends Model
     protected $fillable = [
         'title',
         'file_path',
+        'section_id',
         'uploaded_by',
     ];
 
@@ -21,5 +22,13 @@ class ScheduleFile extends Model
     public function uploader()
     {
         return $this->belongsTo(User::class, 'uploaded_by');
+    }
+
+    /**
+     * الشعبة التي ينتمي إليها الجدول الدراسي.
+     */
+    public function section()
+    {
+        return $this->belongsTo(Section::class);
     }
 }

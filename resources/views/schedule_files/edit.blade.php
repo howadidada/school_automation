@@ -131,7 +131,8 @@
             font-weight: 600;
         }
 
-        input {
+        input,
+        select {
             width: 100%;
             padding: 11px 12px;
             border: 1px solid #d1d5db;
@@ -141,7 +142,8 @@
             background: white;
         }
 
-        input:focus {
+        input:focus,
+        select:focus {
             border-color: #4f46e5;
         }
 
@@ -270,6 +272,44 @@
                         value="{{ old('title', $scheduleFile->title) }}"
                         required
                     >
+
+                </div>
+
+                {{-- الصف والشعبة --}}
+                <div class="form-group">
+
+                    <label for="section_id">
+                        الصف والشعبة
+                    </label>
+
+                    <select
+                        id="section_id"
+                        name="section_id"
+                        required
+                    >
+
+                        <option value="">
+                            اختر الصف والشعبة
+                        </option>
+
+                        @foreach($sections as $section)
+
+                            <option
+                                value="{{ $section->id }}"
+                                {{ (string) old('section_id', $scheduleFile->section_id) === (string) $section->id ? 'selected' : '' }}
+                            >
+                                {{ $section->schoolClass->name ?? 'بدون صف' }}
+                                -
+                                {{ $section->name }}
+                            </option>
+
+                        @endforeach
+
+                    </select>
+
+                    <span class="hint">
+                        اختر الصف والشعبة التي ينتمي إليها ملف الجدول.
+                    </span>
 
                 </div>
 

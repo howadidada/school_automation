@@ -13,6 +13,7 @@ class Teacher extends Model
         'user_id',
         'subject_id',
         'specialization',
+        'education_stage',
     ];
 
     /**
@@ -24,8 +25,11 @@ class Teacher extends Model
     }
 
     /**
-     * المادة التي يدرسها المعلم.
-     * كل معلم له مادة واحدة فقط.
+     * المادة الأساسية للمعلم.
+     *
+     * نحتفظ بها حاليًا للتوافق مع النظام القديم،
+     * أما المواد الفعلية المسندة للمعلم فتحدد
+     * من خلال teacher_assignments.
      */
     public function subject()
     {
@@ -33,7 +37,8 @@ class Teacher extends Model
     }
 
     /**
-     * الشعب التي تم إسنادها للمعلم.
+     * إسنادات المعلم:
+     * المادة + الشعبة.
      */
     public function assignments()
     {
@@ -41,7 +46,7 @@ class Teacher extends Model
     }
 
     /**
-     * الشعب التي يدرسها المعلم.
+     * الشعب المرتبطة بالمعلم.
      */
     public function sections()
     {

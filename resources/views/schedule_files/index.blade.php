@@ -212,10 +212,15 @@
 
             <div>
                 <h2>الجدول الدراسي</h2>
-                <p>رفع وعرض وتعديل ملفات الجدول الدراسي الجاهزة</p>
+                <p>
+                    رفع وعرض وتعديل ملفات الجدول الدراسي الجاهزة
+                </p>
             </div>
 
-            <a href="{{ route('schedule-files.create') }}" class="add-btn">
+            <a
+                href="{{ route('schedule-files.create') }}"
+                class="add-btn"
+            >
                 + رفع ملف جدول
             </a>
 
@@ -228,7 +233,8 @@
         @endif
 
         <div class="info-box">
-            هذه الصفحة مخصصة لرفع ملف الجدول الدراسي الجاهز فقط، ويمكن تعديل عنوان الملف أو استبداله بملف جديد.
+            هذه الصفحة مخصصة لرفع ملف الجدول الدراسي الجاهز فقط،
+            ويمكن تحديد الفصل والشعبة الخاصة بالجدول وتعديل الملف أو استبداله.
         </div>
 
         <div class="table-box">
@@ -239,6 +245,8 @@
                 <tr>
                     <th>#</th>
                     <th>عنوان الملف</th>
+                    <th>الفصل</th>
+                    <th>الشعبة</th>
                     <th>تم الرفع بواسطة</th>
                     <th>تاريخ الرفع</th>
                     <th>الإجراءات</th>
@@ -251,9 +259,21 @@
 
                     <tr>
 
-                        <td>{{ $file->id }}</td>
+                        <td>
+                            {{ $file->id }}
+                        </td>
 
-                        <td>{{ $file->title }}</td>
+                        <td>
+                            {{ $file->title }}
+                        </td>
+
+                        <td>
+                            {{ $file->section?->schoolClass?->name ?? '-' }}
+                        </td>
+
+                        <td>
+                            {{ $file->section?->name ?? '-' }}
+                        </td>
 
                         <td>
                             {{ $file->uploader?->name ?? '-' }}
@@ -290,7 +310,10 @@
                                     @csrf
                                     @method('DELETE')
 
-                                    <button type="submit" class="delete-btn">
+                                    <button
+                                        type="submit"
+                                        class="delete-btn"
+                                    >
                                         حذف
                                     </button>
 
@@ -305,7 +328,10 @@
                 @empty
 
                     <tr>
-                        <td colspan="5" class="empty">
+                        <td
+                            colspan="7"
+                            class="empty"
+                        >
                             لا توجد ملفات للجدول الدراسي حاليًا.
                         </td>
                     </tr>

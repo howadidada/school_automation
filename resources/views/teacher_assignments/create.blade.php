@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>صلة | إسناد معلم</title>
 
     <style>
@@ -145,6 +146,11 @@
             border-color: #4f46e5;
         }
 
+        select:disabled {
+            background: #f3f4f6;
+            cursor: not-allowed;
+        }
+
         .info-box {
             background: #eef2ff;
             color: #3730a3;
@@ -153,6 +159,21 @@
             margin-bottom: 20px;
             line-height: 1.8;
             font-size: 14px;
+        }
+
+        .stage-box {
+            display: none;
+            padding: 12px 14px;
+            margin-bottom: 18px;
+            background: #ecfdf5;
+            color: #065f46;
+            border-radius: 9px;
+            font-size: 14px;
+        }
+
+        .stage-box.error {
+            background: #fee2e2;
+            color: #991b1b;
         }
 
         .save-btn {
@@ -164,6 +185,10 @@
             border-radius: 9px;
             cursor: pointer;
             font-size: 14px;
+        }
+
+        .save-btn:hover {
+            background: #1f2937;
         }
 
         .errors {
@@ -185,6 +210,16 @@
             border-radius: 9px;
             margin-bottom: 20px;
         }
+
+        @media (max-width: 900px) {
+            .layout {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 
@@ -199,42 +234,89 @@
         <div class="topbar">
 
             <div>
-                <h2>إسناد معلم إلى شعبة</h2>
-                <p>اختر المعلم ثم الشعبة التي سيتم إسناده إليها</p>
+                <h2>إسناد معلم</h2>
+
+                <p>
+                    اختر المعلم والمادة والفصل والشعبة المناسبة لمرحلته التعليمية
+                </p>
             </div>
 
-            <a href="{{ route('teacher-assignments.index') }}" class="back-btn">
+            <a
+                href="{{ route('teacher-assignments.index') }}"
+                class="back-btn"
+            >
                 العودة للإسنادات
             </a>
 
         </div>
 
+        {{-- أخطاء التحقق --}}
         @if($errors->any())
+
             <div class="errors">
+
                 <ul>
+
                     @foreach($errors->all() as $error)
-                        <li>{{ $error }}</li>
+
+                        <li>
+                            {{ $error }}
+                        </li>
+
                     @endforeach
+
                 </ul>
+
             </div>
+
         @endif
 
+        {{-- رسالة خطأ --}}
         @if(session('error'))
+
             <div class="alert-error">
+
                 {{ session('error') }}
+
             </div>
+
         @endif
 
         <div class="info-box">
-            كل معلم مرتبط بمادة دراسية واحدة، ويمكن إسناده إلى أكثر من شعبة.
-            لذلك لا تحتاج إلى اختيار المادة هنا.
+
+            يمكن إسناد المعلم إلى أكثر من مادة وأكثر من شعبة.
+
+            <br>
+
+            تظهر للمعلم فقط الفصول والشعب التابعة لمرحلته التعليمية.
+
+            <br>
+
+            <strong>الابتدائية</strong>
+            للمعلم الابتدائي،
+
+            <strong>المتوسطة / الإعدادية</strong>
+            لمعلم المرحلة المتوسطة،
+
+            و
+
+            <strong>الثانوية</strong>
+            لمعلم المرحلة الثانوية.
+
         </div>
 
         <div class="form-box">
 
-            <form method="POST" action="{{ route('teacher-assignments.store') }}">
+            <form
+                method="POST"
+                action="{{ route('teacher-assignments.store') }}"
+            >
 
                 @csrf
+
+                {{-- ================================================= --}}
+                {{-- المعلم --}}
+                {{-- ================================================= --}}
 
                 <div class="form-group">
 
@@ -256,11 +338,32 @@
 
                             <option
                                 value="{{ $teacher->id }}"
+                                data-stage="{{ $teacher->education_stage }}"
                                 {{ old('teacher_id') == $teacher->id ? 'selected' : '' }}
                             >
-                                {{ $teacher->user?->name ?? '-' }}
+
+                                {{ $teacher->user?->name ?? 'معلم بدون اسم' }}
+
                                 -
-                                {{ $teacher->subject?->name ?? 'بدون مادة' }}
+
+                                @if($teacher->education_stage === 'primary')
+
+                                    المرحلة الابتدائية
+
+                                @elseif($teacher->education_stage === 'middle')
+
+                                    المرحلة المتوسطة / الإعدادية
+
+                                @elseif($teacher->education_stage === 'secondary')
+
+                                    المرحلة الثانوية
+
+                                @else
+
+                                    المرحلة غير محددة
+
+                                @endif
+
                             </option>
 
                         @endforeach
@@ -269,31 +372,84 @@
 
                 </div>
 
+                {{-- المرحلة التعليمية للمعلم --}}
+
+                <div
+                    id="stageBox"
+                    class="stage-box"
+                ></div>
+
+                {{-- ================================================= --}}
+                {{-- المادة --}}
+                {{-- ================================================= --}}
+
+                <div class="form-group">
+
+                    <label for="subject_id">
+                        المادة الدراسية
+                    </label>
+
+                    <select
+                        id="subject_id"
+                        name="subject_id"
+                        required
+                    >
+
+                        <option value="">
+                            اختر المادة
+                        </option>
+
+                        @foreach($subjects as $subject)
+
+                            <option
+                                value="{{ $subject->id }}"
+                                {{ old('subject_id') == $subject->id ? 'selected' : '' }}
+                            >
+
+                                {{ $subject->name }}
+
+                            </option>
+
+                        @endforeach
+
+                    </select>
+
+                </div>
+
+                {{-- ================================================= --}}
+                {{-- الفصل والشعبة --}}
+                {{-- ================================================= --}}
+
                 <div class="form-group">
 
                     <label for="section_id">
-                        الشعبة
+                        الفصل والشعبة
                     </label>
 
                     <select
                         id="section_id"
                         name="section_id"
                         required
+                        disabled
                     >
 
                         <option value="">
-                            اختر الشعبة
+                            اختر المعلم أولاً
                         </option>
 
                         @foreach($sections as $section)
 
                             <option
                                 value="{{ $section->id }}"
-                                {{ old('section_id') == $section->id ? 'selected' : '' }}
+                                data-stage="{{ $section->schoolClass?->education_stage }}"
                             >
-                                {{ $section->schoolClass?->name ?? '-' }}
+
+                                {{ $section->schoolClass?->name ?? 'بدون فصل' }}
+
                                 -
-                                {{ $section->name }}
+
+                                الشعبة {{ $section->name }}
+
                             </option>
 
                         @endforeach
@@ -302,7 +458,14 @@
 
                 </div>
 
-                <button type="submit" class="save-btn">
+                {{-- ================================================= --}}
+                {{-- حفظ --}}
+                {{-- ================================================= --}}
+
+                <button
+                    type="submit"
+                    class="save-btn"
+                >
                     حفظ الإسناد
                 </button>
 
@@ -314,5 +477,268 @@
 
 </div>
 
+
+<script>
+
+document.addEventListener('DOMContentLoaded', function () {
+
+    const teacherSelect =
+        document.getElementById('teacher_id');
+
+    const sectionSelect =
+        document.getElementById('section_id');
+
+    const stageBox =
+        document.getElementById('stageBox');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | حفظ الشعب الأصلية
+    |--------------------------------------------------------------------------
+    */
+
+    const originalSections =
+        Array.from(
+            sectionSelect.querySelectorAll(
+                'option[data-stage]'
+            )
+        ).map(
+            option => option.cloneNode(true)
+        );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | الشعبة القديمة في حالة وجود خطأ Validation
+    |--------------------------------------------------------------------------
+    */
+
+    const oldSectionId =
+        @json((string) old('section_id', ''));
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | اسم المرحلة بالعربي
+    |--------------------------------------------------------------------------
+    */
+
+    function getStageName(stage) {
+
+        if (stage === 'primary') {
+            return 'المرحلة الابتدائية';
+        }
+
+        if (stage === 'middle') {
+            return 'المرحلة المتوسطة / الإعدادية';
+        }
+
+        if (stage === 'secondary') {
+            return 'المرحلة الثانوية';
+        }
+
+        return 'مرحلة غير محددة';
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | فلترة الفصول والشعب حسب مرحلة المعلم
+    |--------------------------------------------------------------------------
+    */
+
+    function filterSections(keepOldSection = true) {
+
+        const selectedTeacher =
+            teacherSelect.options[
+                teacherSelect.selectedIndex
+            ];
+
+        const teacherStage =
+            selectedTeacher?.dataset?.stage || '';
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | إذا لم يتم اختيار المعلم
+        |--------------------------------------------------------------------------
+        */
+
+        if (!teacherSelect.value) {
+
+            sectionSelect.innerHTML =
+                '<option value="">اختر المعلم أولاً</option>';
+
+            sectionSelect.disabled = true;
+
+            stageBox.style.display = 'none';
+
+            return;
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | إذا كانت مرحلة المعلم غير محددة
+        |--------------------------------------------------------------------------
+        */
+
+        if (!teacherStage) {
+
+            sectionSelect.innerHTML =
+                '<option value="">مرحلة هذا المعلم غير محددة</option>';
+
+            sectionSelect.disabled = true;
+
+            stageBox.classList.add('error');
+
+            stageBox.style.display = 'block';
+
+            stageBox.textContent =
+                'يجب تحديد المرحلة التعليمية لهذا المعلم أولاً.';
+
+            return;
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | عرض مرحلة المعلم
+        |--------------------------------------------------------------------------
+        */
+
+        stageBox.classList.remove('error');
+
+        stageBox.style.display = 'block';
+
+        stageBox.textContent =
+            'المرحلة التعليمية للمعلم: ' +
+            getStageName(teacherStage);
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | تنظيف القائمة
+        |--------------------------------------------------------------------------
+        */
+
+        sectionSelect.innerHTML = '';
+
+
+        const placeholder =
+            document.createElement('option');
+
+        placeholder.value = '';
+
+        placeholder.textContent =
+            'اختر الفصل والشعبة';
+
+        sectionSelect.appendChild(
+            placeholder
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | اختيار الشعب التابعة لنفس المرحلة
+        |--------------------------------------------------------------------------
+        */
+
+        const allowedSections =
+            originalSections.filter(
+                option =>
+                    option.dataset.stage === teacherStage
+            );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | إضافة الشعب المسموحة
+        |--------------------------------------------------------------------------
+        */
+
+        allowedSections.forEach(option => {
+
+            const clonedOption =
+                option.cloneNode(true);
+
+            clonedOption.selected = false;
+
+            if (
+                keepOldSection &&
+                oldSectionId &&
+                clonedOption.value === oldSectionId
+            ) {
+
+                clonedOption.selected = true;
+
+            }
+
+            sectionSelect.appendChild(
+                clonedOption
+            );
+
+        });
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | إذا لم توجد شعب لهذه المرحلة
+        |--------------------------------------------------------------------------
+        */
+
+        if (allowedSections.length === 0) {
+
+            sectionSelect.innerHTML =
+                '<option value="">لا توجد فصول أو شعب لهذه المرحلة</option>';
+
+            sectionSelect.disabled = true;
+
+            return;
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | تفعيل القائمة
+        |--------------------------------------------------------------------------
+        */
+
+        sectionSelect.disabled = false;
+
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | عند تغيير المعلم
+    |--------------------------------------------------------------------------
+    */
+
+    teacherSelect.addEventListener(
+        'change',
+        function () {
+
+            filterSections(false);
+
+            sectionSelect.value = '';
+
+        }
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | تشغيل الفلترة عند فتح الصفحة
+    |--------------------------------------------------------------------------
+    */
+
+    filterSections(true);
+
+});
+
+</script>
 </body>
 </html>

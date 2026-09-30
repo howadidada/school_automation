@@ -217,13 +217,16 @@
 
             <div>
                 <h2>إسناد المعلمين</h2>
+
                 <p>
-                    إسناد المعلمين إلى الشعب الدراسية.
-                    المادة محددة مسبقًا لكل معلم.
+                    إسناد المعلم إلى المادة والفصل والشعبة المناسبة.
                 </p>
             </div>
 
-            <a href="{{ route('teacher-assignments.create') }}" class="add-btn">
+            <a
+                href="{{ route('teacher-assignments.create') }}"
+                class="add-btn"
+            >
                 + إسناد معلم
             </a>
 
@@ -242,7 +245,9 @@
         @endif
 
         <div class="info-box">
-            كل معلم يدرس مادة واحدة فقط، ويمكن إسناده إلى أكثر من شعبة.
+            يمكن إسناد المعلم إلى أكثر من مادة وأكثر من شعبة.
+            كل سجل يمثل:
+            <strong>المعلم + المادة + الفصل + الشعبة</strong>.
         </div>
 
         <div class="table-box">
@@ -266,7 +271,9 @@
 
                     <tr>
 
-                        <td>{{ $assignment->id }}</td>
+                        <td>
+                            {{ $assignment->id }}
+                        </td>
 
                         <td>
                             {{ $assignment->teacher?->user?->name ?? '-' }}
@@ -274,7 +281,7 @@
 
                         <td>
                             <span class="subject-badge">
-                                {{ $assignment->teacher?->subject?->name ?? '-' }}
+                                {{ $assignment->subject?->name ?? '-' }}
                             </span>
                         </td>
 
@@ -305,7 +312,10 @@
                                     @csrf
                                     @method('DELETE')
 
-                                    <button type="submit" class="delete-btn">
+                                    <button
+                                        type="submit"
+                                        class="delete-btn"
+                                    >
                                         حذف
                                     </button>
 
@@ -320,7 +330,10 @@
                 @empty
 
                     <tr>
-                        <td colspan="6" class="empty">
+                        <td
+                            colspan="6"
+                            class="empty"
+                        >
                             لا توجد إسنادات للمعلمين حاليًا.
                         </td>
                     </tr>
