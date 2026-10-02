@@ -95,6 +95,14 @@ class ScheduleFileController extends Controller
         // تجهيز البيانات لتطبيق Flutter
         // ==========================================================
         $data = $scheduleFiles->map(function ($file) {
+
+            $extension = strtolower(
+                pathinfo(
+                    $file->file_path,
+                    PATHINFO_EXTENSION
+                )
+            );
+
             return [
                 'id' => $file->id,
 
@@ -109,6 +117,8 @@ class ScheduleFileController extends Controller
                     'id' => $file->section_id,
                     'name' => $file->section_name,
                 ],
+
+                'file_type' => $extension,
 
                 'file_url' =>
                     'http://10.0.2.2:8000/api/teacher/schedule-files/'
@@ -127,7 +137,7 @@ class ScheduleFileController extends Controller
     }
 
     /**
-     * فتح ملف الجدول داخل تطبيق Flutter.
+     * جلب ملف الجدول كـ Base64 داخل JSON.
      */
     public function show(Request $request, $id)
     {
@@ -156,7 +166,7 @@ class ScheduleFileController extends Controller
         }
 
         // ==========================================================
-        // جلب ملف الجدول
+        // جلب سجل ملف الجدول
         // ==========================================================
         $scheduleFile = DB::table('schedule_files')
             ->where('id', $id)
@@ -212,62 +222,112 @@ class ScheduleFileController extends Controller
         }
 
         try {
+
             // ======================================================
-            // قراءة ملف PDF كاملاً
+            // معرفة امتداد الملف
             // ======================================================
-            $fileContents = Storage::disk('public')->get(
-                $scheduleFile->file_path
+            $extension = strtolower(
+                pathinfo(
+                    $scheduleFile->file_path,
+                    PATHINFO_EXTENSION
+                )
             );
 
             // ======================================================
-            // التأكد أن الملف ليس فارغاً
+            // تحديد نوع الملف
             // ======================================================
-            if (
-                $fileContents === null ||
-                $fileContents === ''
-            ) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'ملف الجدول فارغ.',
-                ], 404);
-            }
+            $mimeType = match ($extension) {
+                'pdf' => 'application/pdf',
 
-            // ======================================================
-            // التأكد أن الملف PDF
-            // ======================================================
-            if (
-                substr($fileContents, 0, 4)
-                !== '%PDF'
-            ) {
+                'png' => 'image/png',
+
+                'jpg',
+                'jpeg' => 'image/jpeg',
+
+                default => null,
+            };
+
+            if (!$mimeType) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'ملف الجدول ليس ملف PDF صالحاً.',
+                    'message' => 'نوع الملف غير مدعوم.',
                 ], 422);
             }
 
             // ======================================================
-            // إرسال PDF
-            //
-            // مهم:
-            // لا نحدد Content-Length يدوياً.
-            // نترك Laravel / PHP يدير طول وإنهاء الاستجابة.
+            // قراءة الملف
             // ======================================================
-            return response(
-                $fileContents,
-                200
-            )->withHeaders([
-                'Content-Type' => 'application/pdf',
-                'Content-Disposition' =>
-                    'inline; filename="schedule.pdf"',
-                'Cache-Control' =>
-                    'no-store, no-cache, must-revalidate, max-age=0',
-                'Pragma' => 'no-cache',
-                'Expires' => '0',
+            $contents = Storage::disk('public')->get(
+                $scheduleFile->file_path
+            );
+
+            if (
+                $contents === null ||
+                $contents === ''
+            ) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'ملف الجدول فارغ.',
+                ], 422);
+            }
+
+            // ======================================================
+            // الحجم الحقيقي للملف قبل Base64
+            // ======================================================
+            $fileSize = strlen($contents);
+
+            if ($fileSize <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'ملف الجدول فارغ أو غير صالح.',
+                ], 422);
+            }
+
+            // ======================================================
+            // تحويل الملف إلى Base64
+            // ======================================================
+            $base64File = base64_encode(
+                $contents
+            );
+
+            if (empty($base64File)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'تعذر تجهيز ملف الجدول.',
+                ], 500);
+            }
+
+            // ======================================================
+            // إرجاع الملف داخل JSON
+            // ======================================================
+            return response()->json([
+                'success' => true,
+
+                'message' =>
+                    'تم جلب ملف الجدول بنجاح.',
+
+                'data' => [
+                    'mime_type' =>
+                        $mimeType,
+
+                    'extension' =>
+                        $extension,
+
+                    // الحجم الحقيقي للملف
+                    'file_size' =>
+                        $fileSize,
+
+                    // الملف Base64
+                    'file_data' =>
+                        $base64File,
+                ],
             ]);
 
         } catch (\Throwable $e) {
+
             return response()->json([
                 'success' => false,
+
                 'message' =>
                     'حدث خطأ أثناء قراءة ملف الجدول.',
             ], 500);
