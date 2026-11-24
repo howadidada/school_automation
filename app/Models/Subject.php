@@ -15,10 +15,18 @@ class Subject extends Model
     ];
 
     /**
-     * المعلمون الذين يدرسون هذه المادة.
+     * المعلمون المرتبطون بهذه المادة الدراسية.
      */
     public function teachers()
     {
         return $this->hasMany(Teacher::class);
+    }
+
+    /**
+     * التوزيعات التدريسية المرتبطة بهذه المادة.
+     */
+    public function teacherAssignments()
+    {
+        return $this->hasMany(TeacherAssignment::class);
     }
 }

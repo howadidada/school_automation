@@ -2,208 +2,621 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ParentModel;
 use App\Models\Role;
 use App\Models\Section;
 use App\Models\Student;
 use App\Models\User;
+use App\Services\AccountActivationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class StudentController extends Controller
 {
-    // ===============================================================
-    // عرض الطلاب
-    // ===============================================================
+    /*
+    |--------------------------------------------------------------------------
+    | عرض الطلاب
+    |--------------------------------------------------------------------------
+    */
+
     public function index()
     {
         $students = Student::with([
             'user',
             'section.schoolClass',
+            'parents.user',
         ])
             ->latest()
             ->get();
 
-        return view(
-            'students.index',
-            compact('students')
-        );
+        return view('students.index', compact('students'));
     }
 
-    // ===============================================================
-    // صفحة إضافة طالب
-    // ===============================================================
+    /*
+    |--------------------------------------------------------------------------
+    | صفحة إضافة طالب
+    |--------------------------------------------------------------------------
+    */
+
     public function create()
     {
-        $sections = Section::with('schoolClass')
-            ->orderBy('name')
-            ->get();
+        $sections = $this->getSections();
+        $parents = $this->getParents();
 
         return view(
             'students.create',
-            compact('sections')
+            compact('sections', 'parents')
         );
     }
 
-    // ===============================================================
-    // حفظ طالب جديد
-    // ===============================================================
-    public function store(Request $request)
-    {
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-            ],
+    /*
+    |--------------------------------------------------------------------------
+    | حفظ طالب جديد
+    |--------------------------------------------------------------------------
+    */
 
-            'email' => [
-                'required',
-                'email',
-                'max:255',
-                'unique:users,email',
-            ],
+    public function store(
+        Request $request,
+        AccountActivationService $activationService
+    ) {
+        $validated = $request->validate(
+            $this->studentRules()
+        );
 
-            'phone' => [
-                'nullable',
-                'string',
-                'max:30',
-            ],
+        $this->validateNewAccountEmails($validated);
 
-            'password' => [
-                'required',
-                'string',
-                'min:8',
-                'confirmed',
-            ],
+        $newUsers = DB::transaction(function () use ($validated) {
 
-            'section_id' => [
-                'required',
-                'exists:sections,id',
-            ],
+            $section = Section::whereKey(
+                $validated['section_id']
+            )
+                ->lockForUpdate()
+                ->firstOrFail();
 
-            'date_of_birth' => [
-                'nullable',
-                'date',
-            ],
+            $this->checkSectionCapacity($section);
 
-            'gender' => [
-                'nullable',
-                Rule::in([
-                    'male',
-                    'female',
-                ]),
-            ],
-        ]);
-
-        DB::transaction(function () use ($validated) {
-
-            // =======================================================
-            // جلب دور الطالب
-            // =======================================================
             $studentRole = Role::where(
                 'name',
                 'student'
             )->firstOrFail();
 
-            // =======================================================
-            // إنشاء حساب المستخدم
-            // =======================================================
-            $user = User::create([
-                'name' =>
-                    $validated['name'],
-
-                'email' =>
-                    $validated['email'],
-
-                'phone' =>
-                    $validated['phone'] ?? null,
-
-                'password' =>
-                    $validated['password'],
-
-                'role_id' =>
-                    $studentRole->id,
-
-                'is_active' =>
-                    true,
+            $studentUser = User::create([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'phone' => null,
+                'password' => null,
+                'role_id' => $studentRole->id,
+                'is_active' => false,
             ]);
 
-            // =======================================================
-            // إنشاء سجل الطالب
-            // =======================================================
             $student = Student::create([
-                'user_id' =>
-                    $user->id,
-
-                'section_id' =>
-                    $validated['section_id'],
-
-                'student_number' =>
-                    'TEMP',
-
-                'date_of_birth' =>
-                    $validated['date_of_birth']
-                    ?? null,
-
-                'gender' =>
-                    $validated['gender']
-                    ?? null,
+                'user_id' => $studentUser->id,
+                'section_id' => $section->id,
+                'student_number' => 'TEMP-' . $studentUser->id,
+                'date_of_birth' => $validated['date_of_birth'] ?? null,
+                'gender' => $validated['gender'] ?? null,
             ]);
 
-            // =======================================================
-            // إنشاء الرقم الطلابي تلقائياً
-            // =======================================================
             $student->update([
-                'student_number' =>
-                    'STU' .
-                    str_pad(
-                        $student->id,
-                        4,
-                        '0',
-                        STR_PAD_LEFT
-                    ),
+                'student_number' => 'STU' . str_pad(
+                    $student->id,
+                    4,
+                    '0',
+                    STR_PAD_LEFT
+                ),
             ]);
-        });
+
+            $newUsers = [$studentUser];
+            $relations = [];
+
+            foreach (['father', 'mother'] as $relation) {
+
+                $parentData = $validated[$relation] ?? [];
+
+                if (empty($parentData['mode'])) {
+                    continue;
+                }
+
+                if ($parentData['mode'] === 'existing') {
+
+                    $parent = ParentModel::findOrFail(
+                        $parentData['parent_id']
+                    );
+
+                } else {
+
+                    $parentRole = Role::where(
+                        'name',
+                        'parent'
+                    )->firstOrFail();
+
+                    $parentUser = User::create([
+                        'name' => $parentData['name'],
+                        'email' => $parentData['email'],
+                        'phone' => $parentData['phone'],
+                        'password' => null,
+                        'role_id' => $parentRole->id,
+                        'is_active' => false,
+                    ]);
+
+                    $parent = ParentModel::create([
+                        'user_id' => $parentUser->id,
+                    ]);
+
+                    $newUsers[] = $parentUser;
+                }
+
+                if (isset($relations[$parent->id])) {
+                    throw ValidationException::withMessages([
+                        $relation . '.parent_id' =>
+                            'لا يمكن اختيار ولي الأمر نفسه أبًا وأمًا للطالب.',
+                    ]);
+                }
+
+                $relations[$parent->id] = [
+                    'relation' => $relation,
+                ];
+            }
+
+            $student->parents()->sync($relations);
+
+            return $newUsers;
+
+        }, 3);
+
+        /*
+        |--------------------------------------------------------------------------
+        | إرسال روابط التفعيل
+        |--------------------------------------------------------------------------
+        */
+
+        $sentCount = 0;
+        $failedCount = 0;
+
+        foreach ($newUsers as $user) {
+
+            try {
+
+                $activationService->send($user);
+
+                $sentCount++;
+
+            } catch (Throwable $exception) {
+
+                report($exception);
+
+                $failedCount++;
+            }
+        }
+
+        $message = 'تمت إضافة الطالب وربطه بأولياء أموره بنجاح.';
+
+        if ($sentCount > 0) {
+            $message .= ' تم إرسال ' . $sentCount . ' رابط تفعيل.';
+        }
+
+        if ($failedCount > 0) {
+            $message .= ' تعذر إرسال بعض روابط التفعيل، ويمكن إعادة إرسالها لاحقًا.';
+        }
+
+        return redirect()
+            ->route('students.index')
+            ->with('success', $message);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | صفحة تعديل الطالب
+    |--------------------------------------------------------------------------
+    */
+
+    public function edit(Student $student)
+    {
+        $student->load([
+            'user',
+            'parents.user',
+        ]);
+
+        $sections = $this->getSections();
+        $parents = $this->getParents();
+
+        return view(
+            'students.edit',
+            compact('student', 'sections', 'parents')
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | تحديث بيانات الطالب
+    |--------------------------------------------------------------------------
+    */
+
+    public function update(
+        Request $request,
+        Student $student,
+        AccountActivationService $activationService
+    ) {
+        $student->load('user');
+
+        $validated = $request->validate(
+            $this->studentRules($student)
+        );
+
+        $this->validateNewAccountEmails($validated);
+
+        /*
+        |--------------------------------------------------------------------------
+        | قراءة تأكيد فك الارتباط
+        |--------------------------------------------------------------------------
+        */
+
+        $confirmedParentUnlink = $request->boolean(
+            'confirm_parent_unlink'
+        );
+
+        $newUsers = DB::transaction(function () use (
+            $validated,
+            $student,
+            $confirmedParentUnlink
+        ) {
+
+            /*
+            |--------------------------------------------------------------------------
+            | قفل الشعب بترتيب ثابت
+            |--------------------------------------------------------------------------
+            */
+
+            $currentSectionId = (int) $student->section_id;
+            $newSectionId = (int) $validated['section_id'];
+
+            $sectionIds = array_values(array_unique([
+                $currentSectionId,
+                $newSectionId,
+            ]));
+
+            sort($sectionIds);
+
+            $lockedSections = Section::whereIn(
+                'id',
+                $sectionIds
+            )
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            /*
+            |--------------------------------------------------------------------------
+            | قفل الطالب أثناء التعديل
+            |--------------------------------------------------------------------------
+            */
+
+            $student = Student::whereKey($student->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $student->load('user');
+
+            /*
+            |--------------------------------------------------------------------------
+            | جلب ارتباطات أولياء الأمور الحالية
+            |--------------------------------------------------------------------------
+            */
+
+            $existingRelations = DB::table('parent_students')
+                ->where('student_id', $student->id)
+                ->get();
+
+            if (
+                (int) $student->section_id !==
+                $currentSectionId
+            ) {
+                throw ValidationException::withMessages([
+                    'section_id' =>
+                        'تم تغيير شعبة الطالب أثناء العملية. يرجى تحديث الصفحة.',
+                ]);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | فحص سعة الشعبة عند النقل
+            |--------------------------------------------------------------------------
+            */
+
+            if ($newSectionId !== $currentSectionId) {
+
+                $newSection = $lockedSections->get(
+                    $newSectionId
+                );
+
+                if (!$newSection) {
+                    throw ValidationException::withMessages([
+                        'section_id' =>
+                            'الشعبة المحددة غير موجودة.',
+                    ]);
+                }
+
+                $this->checkSectionCapacity($newSection);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | تحديث بيانات الطالب
+            |--------------------------------------------------------------------------
+            */
+
+            $oldEmail = $student->user->email;
+
+            $emailChanged = $oldEmail !== $validated['email'];
+
+            $pendingActivation =
+                !$student->user->is_active &&
+                $student->user->password === null;
+
+            $student->user->update([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'phone' => null,
+            ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | إبطال رابط التفعيل القديم عند تغيير البريد
+            |--------------------------------------------------------------------------
+            */
+
+            if ($emailChanged && $pendingActivation) {
+
+                $oldUser = clone $student->user;
+
+                $oldUser->email = $oldEmail;
+
+                Password::broker()->deleteToken($oldUser);
+            }
+
+            $student->update([
+                'section_id' => $newSectionId,
+                'date_of_birth' =>
+                    $validated['date_of_birth'] ?? null,
+                'gender' =>
+                    $validated['gender'] ?? null,
+            ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | تجهيز ارتباطات أولياء الأمور الجديدة
+            |--------------------------------------------------------------------------
+            */
+
+            $relations = [];
+            $newUsers = [];
+
+            foreach (['father', 'mother'] as $relation) {
+
+                $parentData = $validated[$relation] ?? [];
+
+                if (empty($parentData['mode'])) {
+                    continue;
+                }
+
+                if ($parentData['mode'] === 'existing') {
+
+                    $parent = ParentModel::findOrFail(
+                        $parentData['parent_id']
+                    );
+
+                } else {
+
+                    $parentRole = Role::where(
+                        'name',
+                        'parent'
+                    )->firstOrFail();
+
+                    $parentUser = User::create([
+                        'name' => $parentData['name'],
+                        'email' => $parentData['email'],
+                        'phone' => $parentData['phone'],
+                        'password' => null,
+                        'role_id' => $parentRole->id,
+                        'is_active' => false,
+                    ]);
+
+                    $parent = ParentModel::create([
+                        'user_id' => $parentUser->id,
+                    ]);
+
+                    $newUsers[] = $parentUser;
+                }
+
+                if (isset($relations[$parent->id])) {
+                    throw ValidationException::withMessages([
+                        $relation . '.parent_id' =>
+                            'لا يمكن اختيار ولي الأمر نفسه مرتين.',
+                    ]);
+                }
+
+                $relations[$parent->id] = [
+                    'relation' => $relation,
+                ];
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | حماية فك الارتباط من جهة Laravel
+            |--------------------------------------------------------------------------
+            */
+
+            $existingParentIds = $existingRelations
+                ->pluck('parent_id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            $newParentIds = array_map(
+                'intval',
+                array_keys($relations)
+            );
+
+            $removedParentIds = array_diff(
+                $existingParentIds,
+                $newParentIds
+            );
+
+            /*
+            | إذا كان التعديل سيزيل ارتباطًا قائمًا،
+            | يجب إرسال تأكيد صريح من النموذج.
+            */
+
+            if (
+                !empty($removedParentIds) &&
+                !$confirmedParentUnlink
+            ) {
+                throw ValidationException::withMessages([
+                    'confirm_parent_unlink' =>
+                        'يجب تأكيد فك ارتباط ولي الأمر قبل حفظ التعديلات.',
+                ]);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | تنفيذ تحديث الارتباطات
+            |--------------------------------------------------------------------------
+            |
+            | sync() يغيّر ارتباطات هذا الطالب فقط.
+            | لا يحذف حساب ولي الأمر أو ارتباطاته بطلاب آخرين.
+            |
+            */
+
+            $student->parents()->sync($relations);
+
+            return $newUsers;
+
+        }, 3);
+
+        /*
+        |--------------------------------------------------------------------------
+        | إرسال روابط التفعيل لأولياء الأمور الجدد
+        |--------------------------------------------------------------------------
+        */
+
+        $failedCount = 0;
+
+        foreach ($newUsers as $user) {
+
+            try {
+
+                $activationService->send($user);
+
+            } catch (Throwable $exception) {
+
+                report($exception);
+
+                $failedCount++;
+            }
+        }
+
+        $message = 'تم تعديل بيانات الطالب وأولياء أموره بنجاح.';
+
+        if ($failedCount > 0) {
+            $message .= ' تعذر إرسال بعض روابط التفعيل.';
+        }
+
+        return redirect()
+            ->route('students.index')
+            ->with('success', $message);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | إعادة إرسال رابط تفعيل الطالب
+    |--------------------------------------------------------------------------
+    */
+
+    public function resendActivation(
+        Student $student,
+        AccountActivationService $activationService
+    ) {
+        $student->load('user');
+
+        $user = $student->user;
+
+        if (!$user) {
+            return redirect()
+                ->route('students.index')
+                ->with(
+                    'error',
+                    'لا يوجد حساب مستخدم مرتبط بهذا الطالب.'
+                );
+        }
+
+        if (!$activationService->isPendingActivation($user)) {
+            return redirect()
+                ->route('students.index')
+                ->with(
+                    'error',
+                    'لا يمكن إعادة إرسال رابط التفعيل؛ لأن حساب الطالب لا ينتظر التفعيل.'
+                );
+        }
+
+        try {
+
+            $activationService->send($user);
+
+        } catch (Throwable $exception) {
+
+            report($exception);
+
+            return redirect()
+                ->route('students.index')
+                ->with(
+                    'error',
+                    'تعذر إرسال رابط التفعيل. تحققي من إعدادات البريد الإلكتروني ثم حاولي مرة أخرى.'
+                );
+        }
 
         return redirect()
             ->route('students.index')
             ->with(
                 'success',
-                'تم إضافة الطالب بنجاح وتوليد الرقم الطلابي تلقائيًا.'
+                'تم إرسال رابط التفعيل إلى البريد الإلكتروني للطالب.'
             );
     }
 
-    // ===============================================================
-    // صفحة تعديل الطالب
-    // ===============================================================
-    public function edit(Student $student)
+    /*
+    |--------------------------------------------------------------------------
+    | حذف الطالب
+    |--------------------------------------------------------------------------
+    */
+
+    public function destroy(Student $student)
     {
-        $student->load('user');
-
-        $sections = Section::with('schoolClass')
-            ->orderBy('name')
-            ->get();
-
-        return view(
-            'students.edit',
-            compact(
-                'student',
-                'sections'
-            )
-        );
+        return redirect()
+            ->route('students.index')
+            ->with(
+                'error',
+                'تم إيقاف الحذف النهائي للطلاب مؤقتًا لحماية السجلات الأكاديمية. سيتم توفير الأرشفة بدلًا منه.'
+            );
     }
 
-    // ===============================================================
-    // تحديث بيانات الطالب
-    // ===============================================================
-    public function update(
-        Request $request,
-        Student $student
-    ) {
-        $student->load('user');
+    /*
+    |--------------------------------------------------------------------------
+    | قواعد التحقق
+    |--------------------------------------------------------------------------
+    */
 
-        $validated = $request->validate([
+    private function studentRules(?Student $student = null): array
+    {
+        $emailRule = Rule::unique('users', 'email');
+
+        if ($student) {
+            $emailRule->ignore($student->user_id);
+        }
+
+        $rules = [
             'name' => [
                 'required',
                 'string',
@@ -214,26 +627,7 @@ class StudentController extends Controller
                 'required',
                 'email',
                 'max:255',
-
-                Rule::unique(
-                    'users',
-                    'email'
-                )->ignore(
-                    $student->user_id
-                ),
-            ],
-
-            'phone' => [
-                'nullable',
-                'string',
-                'max:30',
-            ],
-
-            'password' => [
-                'nullable',
-                'string',
-                'min:8',
-                'confirmed',
+                $emailRule,
             ],
 
             'section_id' => [
@@ -244,118 +638,161 @@ class StudentController extends Controller
             'date_of_birth' => [
                 'nullable',
                 'date',
+                'before_or_equal:today',
             ],
 
             'gender' => [
                 'nullable',
-                Rule::in([
-                    'male',
-                    'female',
-                ]),
+                Rule::in(['male', 'female']),
             ],
-        ]);
+        ];
 
-        DB::transaction(
-            function () use (
-                $validated,
-                $student
-            ) {
-                // ===================================================
-                // تحديث بيانات حساب المستخدم
-                // ===================================================
-                $userData = [
-                    'name' =>
-                        $validated['name'],
+        foreach (['father', 'mother'] as $relation) {
 
-                    'email' =>
-                        $validated['email'],
+            $rules[$relation] = [
+                'nullable',
+                'array',
+            ];
 
-                    'phone' =>
-                        $validated['phone'] ?? null,
-                ];
+            $rules[$relation . '.mode'] = [
+                'nullable',
+                Rule::in(['existing', 'new']),
+            ];
 
-                // ===================================================
-                // تغيير كلمة المرور فقط إذا تم إدخال كلمة جديدة
-                // ===================================================
-                if (
-                    !empty(
-                        $validated['password']
-                    )
-                ) {
-                    $userData['password'] =
-                        $validated['password'];
-                }
+            $rules[$relation . '.parent_id'] = [
+                'required_if:' . $relation . '.mode,existing',
+                'nullable',
+                'integer',
+                'exists:parents,id',
+            ];
 
-                $student->user->update(
-                    $userData
-                );
+            $rules[$relation . '.name'] = [
+                'required_if:' . $relation . '.mode,new',
+                'nullable',
+                'string',
+                'max:255',
+            ];
 
-                // ===================================================
-                // تحديث بيانات الطالب
-                //
-                // مهم:
-                // إذا لم تصل قيمة الجنس أو تاريخ الميلاد
-                // نحافظ على القيمة القديمة ولا نمسحها.
-                // ===================================================
-                $student->update([
-                    'section_id' =>
-                        $validated['section_id'],
+            $rules[$relation . '.email'] = [
+                'required_if:' . $relation . '.mode,new',
+                'nullable',
+                'email',
+                'max:255',
+                'unique:users,email',
+            ];
 
-                    'date_of_birth' =>
-                        $validated['date_of_birth']
-                        ?? $student->date_of_birth,
+            $rules[$relation . '.phone'] = [
+                'required_if:' . $relation . '.mode,new',
+                'nullable',
+                'string',
+                'regex:/^(?:(?:\+967|00967)?(?:77|78|73|71|70)[0-9]{7})$/',
+            ];
+        }
 
-                    'gender' =>
-                        $validated['gender']
-                        ?? $student->gender,
-                ]);
-            }
-        );
-
-        return redirect()
-            ->route('students.index')
-            ->with(
-                'success',
-                'تم تعديل بيانات الطالب بنجاح.'
-            );
+        return $rules;
     }
 
-    // ===============================================================
-    // حذف الطالب
-    // ===============================================================
-    public function destroy(Student $student)
+    /*
+    |--------------------------------------------------------------------------
+    | منع تكرار البريد بين الحسابات الجديدة
+    |--------------------------------------------------------------------------
+    */
+
+    private function validateNewAccountEmails(array $validated): void
     {
-        DB::transaction(function () use ($student) {
+        $emails = [
+            'email' => $validated['email'],
+        ];
 
-            $student->load('user');
+        foreach (['father', 'mother'] as $relation) {
 
-            $user = $student->user;
+            $parentData = $validated[$relation] ?? [];
 
-            // =======================================================
-            // حذف روابط ولي الأمر مع الطالب
-            // =======================================================
-            $student
-                ->parents()
-                ->detach();
-
-            // =======================================================
-            // حذف سجل الطالب
-            // =======================================================
-            $student->delete();
-
-            // =======================================================
-            // حذف حساب المستخدم المرتبط بالطالب
-            // =======================================================
-            if ($user) {
-                $user->delete();
+            if (
+                ($parentData['mode'] ?? null) === 'new' &&
+                !empty($parentData['email'])
+            ) {
+                $emails[$relation . '.email'] =
+                    $parentData['email'];
             }
-        });
+        }
 
-        return redirect()
-            ->route('students.index')
-            ->with(
-                'success',
-                'تم حذف الطالب بنجاح.'
+        $seen = [];
+
+        foreach ($emails as $field => $email) {
+
+            $normalizedEmail = mb_strtolower(
+                trim($email)
             );
+
+            if (isset($seen[$normalizedEmail])) {
+                throw ValidationException::withMessages([
+                    $field =>
+                        'لا يمكن استخدام البريد الإلكتروني نفسه لأكثر من حساب.',
+                ]);
+            }
+
+            $seen[$normalizedEmail] = true;
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | جلب الشعب
+    |--------------------------------------------------------------------------
+    */
+
+    private function getSections()
+    {
+        return Section::with('schoolClass')
+            ->withCount('students')
+            ->orderBy('name')
+            ->get();
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | جلب أولياء الأمور
+    |--------------------------------------------------------------------------
+    */
+
+    private function getParents()
+    {
+        return ParentModel::with('user')
+            ->orderBy('id')
+            ->get();
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | التحقق من سعة الشعبة
+    |--------------------------------------------------------------------------
+    */
+
+    private function checkSectionCapacity(Section $section): void
+    {
+        if (
+            $section->capacity === null ||
+            (int) $section->capacity < 1
+        ) {
+            throw ValidationException::withMessages([
+                'section_id' =>
+                    'لا يمكن التسجيل في هذه الشعبة لأن سعتها غير محددة.',
+            ]);
+        }
+
+        $studentsCount = Student::where(
+            'section_id',
+            $section->id
+        )->count();
+
+        if ($studentsCount >= (int) $section->capacity) {
+            throw ValidationException::withMessages([
+                'section_id' =>
+                    'الشعبة ممتلئة، والحد الأقصى '
+                    . $section->capacity
+                    . ' طالبًا.',
+            ]);
+        }
     }
 }

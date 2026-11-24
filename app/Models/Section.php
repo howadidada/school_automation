@@ -13,10 +13,11 @@ class Section extends Model
         'school_class_id',
         'name',
         'capacity',
+        'gender_section',
     ];
 
     /**
-     * الفصل الذي تنتمي إليه الشعبة.
+     * الصف الدراسي الذي تنتمي إليه الشعبة.
      */
     public function schoolClass()
     {
@@ -24,7 +25,7 @@ class Section extends Model
     }
 
     /**
-     * الطلاب الموجودون في هذه الشعبة.
+     * الطلاب المسجلون في الشعبة.
      */
     public function students()
     {

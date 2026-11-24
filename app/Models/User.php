@@ -11,6 +11,9 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
+    /**
+     * الحقول المسموح بحفظها وتحديثها.
+     */
     protected $fillable = [
         'name',
         'email',
@@ -18,13 +21,21 @@ class User extends Authenticatable
         'password',
         'role_id',
         'is_active',
+        'education_stage',
+        'gender_section',
     ];
 
+    /**
+     * الحقول المخفية عند تحويل النموذج إلى JSON.
+     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
+    /**
+     * تحويل أنواع البيانات.
+     */
     protected function casts(): array
     {
         return [
@@ -71,11 +82,14 @@ class User extends Authenticatable
      */
     public function scheduleFiles()
     {
-        return $this->hasMany(ScheduleFile::class, 'uploaded_by');
+        return $this->hasMany(
+            ScheduleFile::class,
+            'uploaded_by'
+        );
     }
 
     /**
-     * التحقق من أن المستخدم لديه دور معين.
+     * التحقق من دور المستخدم.
      */
     public function hasRole(string $role): bool
     {
@@ -83,7 +97,7 @@ class User extends Authenticatable
     }
 
     /**
-     * التحقق من امتلاك المستخدم لصلاحية معينة.
+     * التحقق من امتلاك صلاحية معينة.
      */
     public function hasPermission(string $permission): bool
     {

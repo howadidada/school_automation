@@ -7,85 +7,177 @@ use App\Models\Section;
 use App\Models\Subject;
 use App\Models\TeacherAssignment;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class TeacherAssignmentController extends Controller
 {
     // ===============================================================
-    // تحديد مرحلة الشعبة من الفصل المرتبط بها
+    // تحديد مرحلة الشعبة من الصف المرتبط بها
     // ===============================================================
     private function getSectionStage(Section $section): ?string
     {
         $section->loadMissing('schoolClass');
 
-        if (!$section->schoolClass) {
-            return null;
-        }
-
-        return $section->schoolClass->education_stage;
+        return $section->schoolClass?->education_stage;
     }
 
     // ===============================================================
-    // التأكد أن المعلم مسموح له بتدريس هذه الشعبة
-    // حسب مرحلته التعليمية
+    // التأكد من توافق مرحلة المعلم مع مرحلة الشعبة
     // ===============================================================
     private function teacherCanTeachSection(
         Teacher $teacher,
         Section $section
     ): bool {
+        $allowedStages = [
+            'primary',
+            'middle',
+            'secondary',
+        ];
+
         if (!in_array(
             $teacher->education_stage,
-            [
-                'primary',
-                'middle',
-                'secondary',
-            ],
+            $allowedStages,
             true
         )) {
             return false;
         }
 
-        $sectionStage =
-            $this->getSectionStage($section);
+        $sectionStage = $this->getSectionStage($section);
 
-        if (!$sectionStage) {
-            return false;
-        }
-
-        return $teacher->education_stage ===
-            $sectionStage;
+        return $sectionStage !== null
+            && $teacher->education_stage === $sectionStage;
     }
 
     // ===============================================================
-    // اسم المرحلة بالعربي للرسائل
+    // اسم المرحلة بالعربي
     // ===============================================================
     private function stageName(?string $stage): string
     {
         return match ($stage) {
-            'primary' =>
-                'المرحلة الابتدائية',
-
-            'middle' =>
-                'المرحلة المتوسطة / الإعدادية',
-
-            'secondary' =>
-                'المرحلة الثانوية',
-
-            default =>
-                'مرحلة غير محددة',
+            'primary' => 'المرحلة الابتدائية',
+            'middle' => 'المرحلة المتوسطة / الإعدادية',
+            'secondary' => 'المرحلة الثانوية',
+            default => 'مرحلة غير محددة',
         };
     }
 
     // ===============================================================
-    // عرض جميع إسنادات المعلمين
+    // التحقق من صحة بيانات التوزيع
+    // ===============================================================
+    private function validateAssignment(
+        Teacher $teacher,
+        Section $section,
+        int $subjectId,
+        ?int $ignoreAssignmentId = null
+    ): void {
+
+        // -----------------------------------------------------------
+        // يجب أن تكون للمعلم مادة أساسية محددة
+        // -----------------------------------------------------------
+        if (!$teacher->subject_id) {
+            throw ValidationException::withMessages([
+                'subject_id' =>
+                    'يجب تحديد مادة المعلم الأساسية من صفحة إدارة المعلمين أولًا.',
+            ]);
+        }
+
+        // -----------------------------------------------------------
+        // منع اختيار مادة مختلفة عن مادة المعلم
+        // -----------------------------------------------------------
+        if ((int) $teacher->subject_id !== $subjectId) {
+            throw ValidationException::withMessages([
+                'subject_id' =>
+                    'لا يمكن توزيع المعلم على مادة مختلفة عن مادته الأساسية. '
+                    . 'يرجى اختيار المادة المحددة له في إدارة المعلمين.',
+            ]);
+        }
+
+        // -----------------------------------------------------------
+        // التأكد من وجود مرحلة تعليمية للمعلم
+        // -----------------------------------------------------------
+        if (!in_array(
+            $teacher->education_stage,
+            ['primary', 'middle', 'secondary'],
+            true
+        )) {
+            throw ValidationException::withMessages([
+                'teacher_id' =>
+                    'يجب تحديد مرحلة تعليمية صحيحة للمعلم أولًا.',
+            ]);
+        }
+
+        // -----------------------------------------------------------
+        // التأكد من ارتباط الشعبة بصف دراسي
+        // -----------------------------------------------------------
+        if (!$section->schoolClass) {
+            throw ValidationException::withMessages([
+                'section_id' =>
+                    'هذه الشعبة غير مرتبطة بصف دراسي.',
+            ]);
+        }
+
+        // -----------------------------------------------------------
+        // التأكد من تحديد مرحلة الصف
+        // -----------------------------------------------------------
+        if (!$section->schoolClass->education_stage) {
+            throw ValidationException::withMessages([
+                'section_id' =>
+                    'يجب تحديد المرحلة التعليمية للصف أولًا.',
+            ]);
+        }
+
+        // -----------------------------------------------------------
+        // منع توزيع المعلم على مرحلة تعليمية مختلفة
+        // -----------------------------------------------------------
+        if (!$this->teacherCanTeachSection(
+            $teacher,
+            $section
+        )) {
+            throw ValidationException::withMessages([
+                'section_id' =>
+                    'لا يمكن توزيع هذا المعلم على هذه الشعبة. '
+                    . 'مرحلة المعلم هي '
+                    . $this->stageName($teacher->education_stage)
+                    . '، بينما مرحلة الصف هي '
+                    . $this->stageName(
+                        $section->schoolClass->education_stage
+                    )
+                    . '.',
+            ]);
+        }
+
+        // -----------------------------------------------------------
+        // منع تكرار المعلم في الشعبة نفسها
+        // حتى لو اختلفت المادة
+        // -----------------------------------------------------------
+        $query = TeacherAssignment::query()
+            ->where('teacher_id', $teacher->id)
+            ->where('section_id', $section->id);
+
+        if ($ignoreAssignmentId !== null) {
+            $query->where('id', '!=', $ignoreAssignmentId);
+        }
+
+        if ($query->exists()) {
+            throw ValidationException::withMessages([
+                'section_id' =>
+                    'هذا المعلم موزع بالفعل على هذه الشعبة. '
+                    . 'لا يمكن تكرار التوزيع.',
+            ]);
+        }
+    }
+
+    // ===============================================================
+    // عرض جميع توزيعات المعلمين
     // ===============================================================
     public function index()
     {
-        $assignments =
-            TeacherAssignment::with([
-                'teacher.user',
-                'subject',
-                'section.schoolClass',
-            ])
+        $assignments = TeacherAssignment::with([
+            'teacher.user',
+            'subject',
+            'section.schoolClass',
+        ])
             ->latest()
             ->get();
 
@@ -96,23 +188,22 @@ class TeacherAssignmentController extends Controller
     }
 
     // ===============================================================
-    // صفحة إضافة إسناد جديد
+    // صفحة إضافة توزيع جديد
     // ===============================================================
     public function create()
     {
-        $teachers =
-            Teacher::with('user')
-                ->orderBy('id')
-                ->get();
+        $teachers = Teacher::with([
+            'user',
+            'subject',
+        ])
+            ->orderBy('id')
+            ->get();
 
-        $subjects =
-            Subject::orderBy('name')
-                ->get();
+        $subjects = Subject::orderBy('name')->get();
 
-        $sections =
-            Section::with('schoolClass')
-                ->orderBy('name')
-                ->get();
+        $sections = Section::with('schoolClass')
+            ->orderBy('name')
+            ->get();
 
         return view(
             'teacher_assignments.create',
@@ -125,8 +216,7 @@ class TeacherAssignmentController extends Controller
     }
 
     // ===============================================================
-    // حفظ إسناد جديد
-    // المعلم + المادة + الشعبة
+    // حفظ توزيع جديد
     // ===============================================================
     public function store(Request $request)
     {
@@ -150,182 +240,62 @@ class TeacherAssignmentController extends Controller
             ],
         ]);
 
-        // -----------------------------------------------------------
-        // جلب المعلم
-        // -----------------------------------------------------------
-        $teacher =
-            Teacher::with('user')
-                ->findOrFail(
-                    $validated['teacher_id']
-                );
+        DB::transaction(function () use ($validated) {
 
-        // -----------------------------------------------------------
-        // جلب الشعبة والفصل
-        // -----------------------------------------------------------
-        $section =
-            Section::with('schoolClass')
-                ->findOrFail(
-                    $validated['section_id']
-                );
+            // قفل سجل المعلم أثناء إنشاء التوزيع
+            $teacher = Teacher::query()
+                ->lockForUpdate()
+                ->findOrFail($validated['teacher_id']);
 
-        // -----------------------------------------------------------
-        // التأكد من تحديد مرحلة المعلم
-        // -----------------------------------------------------------
-        if (!$teacher->education_stage) {
+            $section = Section::with('schoolClass')
+                ->findOrFail($validated['section_id']);
 
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'يجب تحديد المرحلة التعليمية للمعلم أولاً.'
-                );
-        }
+            $this->validateAssignment(
+                $teacher,
+                $section,
+                (int) $validated['subject_id']
+            );
 
-        // -----------------------------------------------------------
-        // التأكد من صحة قيمة مرحلة المعلم
-        // -----------------------------------------------------------
-        if (!in_array(
-            $teacher->education_stage,
-            [
-                'primary',
-                'middle',
-                'secondary',
-            ],
-            true
-        )) {
-
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'المرحلة التعليمية الخاصة بالمعلم غير صحيحة.'
-                );
-        }
-
-        // -----------------------------------------------------------
-        // التأكد من وجود فصل مرتبط بالشعبة
-        // -----------------------------------------------------------
-        if (!$section->schoolClass) {
-
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'هذه الشعبة غير مرتبطة بفصل دراسي.'
-                );
-        }
-
-        // -----------------------------------------------------------
-        // التأكد من تحديد مرحلة الفصل
-        // -----------------------------------------------------------
-        if (!$section->schoolClass->education_stage) {
-
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'يجب تحديد المرحلة التعليمية للفصل أولاً.'
-                );
-        }
-
-        // -----------------------------------------------------------
-        // منع إسناد المعلم إلى مرحلة أخرى
-        // -----------------------------------------------------------
-        if (!$this->teacherCanTeachSection(
-            $teacher,
-            $section
-        )) {
-
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'لا يمكن إسناد هذا المعلم إلى هذه الشعبة. ' .
-                    'مرحلة المعلم هي ' .
-                    $this->stageName(
-                        $teacher->education_stage
-                    ) .
-                    '، بينما مرحلة الفصل هي ' .
-                    $this->stageName(
-                        $section->schoolClass
-                            ->education_stage
-                    ) .
-                    '.'
-                );
-        }
-
-        // -----------------------------------------------------------
-        // منع تكرار:
-        // المعلم + المادة + الشعبة
-        // -----------------------------------------------------------
-        $exists =
-            TeacherAssignment::where(
-                'teacher_id',
-                $validated['teacher_id']
-            )
-            ->where(
-                'subject_id',
-                $validated['subject_id']
-            )
-            ->where(
-                'section_id',
-                $validated['section_id']
-            )
-            ->exists();
-
-        if ($exists) {
-
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'هذا المعلم مسند بالفعل إلى هذه المادة وهذه الشعبة.'
-                );
-        }
-
-        // -----------------------------------------------------------
-        // إنشاء الإسناد
-        // -----------------------------------------------------------
-        TeacherAssignment::create([
-            'teacher_id' =>
-                $validated['teacher_id'],
-
-            'subject_id' =>
-                $validated['subject_id'],
-
-            'section_id' =>
-                $validated['section_id'],
-        ]);
+            TeacherAssignment::create([
+                'teacher_id' => $teacher->id,
+                'subject_id' => $teacher->subject_id,
+                'section_id' => $section->id,
+            ]);
+        });
 
         return redirect()
-            ->route(
-                'teacher-assignments.index'
-            )
+            ->route('teacher-assignments.index')
             ->with(
                 'success',
-                'تم إسناد المعلم إلى المادة والشعبة بنجاح.'
+                'تم توزيع المعلم على الشعبة بنجاح.'
             );
     }
 
     // ===============================================================
-    // صفحة تعديل الإسناد
+    // صفحة تعديل التوزيع
     // ===============================================================
     public function edit(
         TeacherAssignment $teacherAssignment
     ) {
-        $teachers =
-            Teacher::with('user')
-                ->orderBy('id')
-                ->get();
+        $teacherAssignment->load([
+            'teacher.user',
+            'teacher.subject',
+            'subject',
+            'section.schoolClass',
+        ]);
 
-        $subjects =
-            Subject::orderBy('name')
-                ->get();
+        $teachers = Teacher::with([
+            'user',
+            'subject',
+        ])
+            ->orderBy('id')
+            ->get();
 
-        $sections =
-            Section::with('schoolClass')
-                ->orderBy('name')
-                ->get();
+        $subjects = Subject::orderBy('name')->get();
+
+        $sections = Section::with('schoolClass')
+            ->orderBy('name')
+            ->get();
 
         return view(
             'teacher_assignments.edit',
@@ -339,7 +309,7 @@ class TeacherAssignmentController extends Controller
     }
 
     // ===============================================================
-    // تحديث الإسناد
+    // تحديث التوزيع
     // ===============================================================
     public function update(
         Request $request,
@@ -365,169 +335,41 @@ class TeacherAssignmentController extends Controller
             ],
         ]);
 
-        // -----------------------------------------------------------
-        // جلب المعلم
-        // -----------------------------------------------------------
-        $teacher =
-            Teacher::with('user')
-                ->findOrFail(
-                    $validated['teacher_id']
-                );
+        DB::transaction(function () use (
+            $validated,
+            $teacherAssignment
+        ) {
+            $teacher = Teacher::query()
+                ->lockForUpdate()
+                ->findOrFail($validated['teacher_id']);
 
-        // -----------------------------------------------------------
-        // جلب الشعبة والفصل
-        // -----------------------------------------------------------
-        $section =
-            Section::with('schoolClass')
-                ->findOrFail(
-                    $validated['section_id']
-                );
+            $section = Section::with('schoolClass')
+                ->findOrFail($validated['section_id']);
 
-        // -----------------------------------------------------------
-        // التأكد من تحديد مرحلة المعلم
-        // -----------------------------------------------------------
-        if (!$teacher->education_stage) {
-
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'يجب تحديد المرحلة التعليمية للمعلم أولاً.'
-                );
-        }
-
-        // -----------------------------------------------------------
-        // التأكد من صحة قيمة مرحلة المعلم
-        // -----------------------------------------------------------
-        if (!in_array(
-            $teacher->education_stage,
-            [
-                'primary',
-                'middle',
-                'secondary',
-            ],
-            true
-        )) {
-
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'المرحلة التعليمية الخاصة بالمعلم غير صحيحة.'
-                );
-        }
-
-        // -----------------------------------------------------------
-        // التأكد من وجود الفصل
-        // -----------------------------------------------------------
-        if (!$section->schoolClass) {
-
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'هذه الشعبة غير مرتبطة بفصل دراسي.'
-                );
-        }
-
-        // -----------------------------------------------------------
-        // التأكد من تحديد مرحلة الفصل
-        // -----------------------------------------------------------
-        if (!$section->schoolClass->education_stage) {
-
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'يجب تحديد المرحلة التعليمية للفصل أولاً.'
-                );
-        }
-
-        // -----------------------------------------------------------
-        // منع نقل الإسناد إلى مرحلة مختلفة
-        // -----------------------------------------------------------
-        if (!$this->teacherCanTeachSection(
-            $teacher,
-            $section
-        )) {
-
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'لا يمكن إسناد هذا المعلم إلى هذه الشعبة. ' .
-                    'مرحلة المعلم هي ' .
-                    $this->stageName(
-                        $teacher->education_stage
-                    ) .
-                    '، بينما مرحلة الفصل هي ' .
-                    $this->stageName(
-                        $section->schoolClass
-                            ->education_stage
-                    ) .
-                    '.'
-                );
-        }
-
-        // -----------------------------------------------------------
-        // منع التكرار مع تجاهل السجل الحالي
-        // -----------------------------------------------------------
-        $exists =
-            TeacherAssignment::where(
-                'teacher_id',
-                $validated['teacher_id']
-            )
-            ->where(
-                'subject_id',
-                $validated['subject_id']
-            )
-            ->where(
-                'section_id',
-                $validated['section_id']
-            )
-            ->where(
-                'id',
-                '!=',
+            $this->validateAssignment(
+                $teacher,
+                $section,
+                (int) $validated['subject_id'],
                 $teacherAssignment->id
-            )
-            ->exists();
+            );
 
-        if ($exists) {
-
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'هذا المعلم مسند بالفعل إلى هذه المادة وهذه الشعبة.'
-                );
-        }
-
-        // -----------------------------------------------------------
-        // تحديث الإسناد
-        // -----------------------------------------------------------
-        $teacherAssignment->update([
-            'teacher_id' =>
-                $validated['teacher_id'],
-
-            'subject_id' =>
-                $validated['subject_id'],
-
-            'section_id' =>
-                $validated['section_id'],
-        ]);
+            $teacherAssignment->update([
+                'teacher_id' => $teacher->id,
+                'subject_id' => $teacher->subject_id,
+                'section_id' => $section->id,
+            ]);
+        });
 
         return redirect()
-            ->route(
-                'teacher-assignments.index'
-            )
+            ->route('teacher-assignments.index')
             ->with(
                 'success',
-                'تم تعديل إسناد المعلم بنجاح.'
+                'تم تعديل توزيع المعلم بنجاح.'
             );
     }
 
     // ===============================================================
-    // حذف الإسناد
+    // حذف التوزيع
     // ===============================================================
     public function destroy(
         TeacherAssignment $teacherAssignment
@@ -535,12 +377,10 @@ class TeacherAssignmentController extends Controller
         $teacherAssignment->delete();
 
         return redirect()
-            ->route(
-                'teacher-assignments.index'
-            )
+            ->route('teacher-assignments.index')
             ->with(
                 'success',
-                'تم حذف إسناد المعلم بنجاح.'
+                'تم حذف توزيع المعلم بنجاح.'
             );
     }
 }

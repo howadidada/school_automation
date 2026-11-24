@@ -12,10 +12,11 @@ class SchoolClass extends Model
     protected $fillable = [
         'name',
         'grade_level',
+        'education_stage',
     ];
 
     /**
-     * الشعب التابعة لهذا الفصل.
+     * الشعب التابعة لهذا الصف.
      */
     public function sections()
     {

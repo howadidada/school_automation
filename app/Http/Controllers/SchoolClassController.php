@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\SchoolClass;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class SchoolClassController extends Controller
 {
@@ -26,12 +27,13 @@ class SchoolClassController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'grade_level' => ['nullable', 'string', 'max:255'],
+            'education_stage' => [
+                'required',
+                Rule::in(['primary', 'middle', 'secondary']),
+            ],
         ]);
 
-        SchoolClass::create([
-            'name' => $validated['name'],
-            'grade_level' => $validated['grade_level'] ?? null,
-        ]);
+        SchoolClass::create($validated);
 
         return redirect()
             ->route('classes.index')
@@ -48,12 +50,13 @@ class SchoolClassController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'grade_level' => ['nullable', 'string', 'max:255'],
+            'education_stage' => [
+                'required',
+                Rule::in(['primary', 'middle', 'secondary']),
+            ],
         ]);
 
-        $schoolClass->update([
-            'name' => $validated['name'],
-            'grade_level' => $validated['grade_level'] ?? null,
-        ]);
+        $schoolClass->update($validated);
 
         return redirect()
             ->route('classes.index')

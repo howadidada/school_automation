@@ -4,15 +4,26 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Grade;
+use App\Models\GradeBatch;
 use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class GradeController extends Controller
 {
-    // ===============================================================
-    // الحصول على المعلم المسجل دخوله
-    // ===============================================================
+    // ==========================================================
+    // Helpers
+    // ==========================================================
+
+    private function error(string $message, int $status = 403)
+    {
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+        ], $status);
+    }
+
     private function getAuthenticatedTeacher(Request $request)
     {
         $user = $request->user();
@@ -26,9 +37,6 @@ class GradeController extends Controller
             ->first();
     }
 
-    // ===============================================================
-    // التحقق أن المادة مسندة للمعلم
-    // ===============================================================
     private function teacherHasSubject(
         int $teacherId,
         int $subjectId
@@ -39,9 +47,6 @@ class GradeController extends Controller
             ->exists();
     }
 
-    // ===============================================================
-    // التحقق أن الطالب ضمن شعبة مسندة للمعلم
-    // ===============================================================
     private function teacherCanAccessStudent(
         int $teacherId,
         int $studentId,
@@ -57,126 +62,118 @@ class GradeController extends Controller
 
         $query = DB::table('teacher_assignments')
             ->where('teacher_id', $teacherId)
-            ->where(
-                'section_id',
-                $student->section_id
-            );
+            ->where('section_id', $student->section_id);
 
         if ($subjectId !== null) {
-            $query->where(
-                'subject_id',
-                $subjectId
-            );
+            $query->where('subject_id', $subjectId);
         }
 
         return $query->exists();
     }
 
-    // ===============================================================
-    // جلب الدرجات
-    // ===============================================================
+    private function canEditBatch(GradeBatch $batch): bool
+    {
+        return in_array(
+            $batch->status,
+            ['draft', 'rejected'],
+            true
+        );
+    }
+
+    private function batchLockMessage(GradeBatch $batch): string
+    {
+        if ($batch->status === 'approved') {
+            return 'لا يمكن تعديل أو حذف درجات كشف تم اعتماده من الوكيل.';
+        }
+
+        if ($batch->status === 'submitted') {
+            return 'الكشف مرسل للاعتماد، ولا يمكن تعديل درجاته حتى يعيده الوكيل.';
+        }
+
+        return 'لا يمكن تعديل درجات الكشف في حالته الحالية.';
+    }
+
+    private function notifyTeacher(
+        int $userId,
+        int $gradeId,
+        string $message
+    ): void {
+        Notification::create([
+            'user_id' => $userId,
+            'type' => 'grade',
+            'title' => 'تحديث الدرجات',
+            'body' => $message,
+            'is_read' => false,
+            'reference_id' => $gradeId,
+            'reference_type' => 'grade',
+        ]);
+    }
+
+    // ==========================================================
+    // عرض الدرجات
+    // ==========================================================
+
     public function index(Request $request)
     {
-        $teacher =
-            $this->getAuthenticatedTeacher(
-                $request
-            );
+        $teacher = $this->getAuthenticatedTeacher($request);
 
         if (!$teacher) {
-            return response()->json([
-                'success' => false,
-                'message' =>
-                    'هذا الحساب غير مرتبط بمعلم.',
-            ], 403);
+            return $this->error('هذا الحساب غير مرتبط بمعلم.');
         }
 
         $query = Grade::with([
             'student',
             'teacher',
             'subject',
-        ])
-            ->where(
-                'teacher_id',
-                $teacher->id
-            );
+        ])->where('teacher_id', $teacher->id);
 
         $subjectId = null;
 
         if ($request->filled('subject_id')) {
-            $subjectId =
-                (int) $request->subject_id;
+            $subjectId = (int) $request->subject_id;
 
-            if (
-                !$this->teacherHasSubject(
-                    $teacher->id,
-                    $subjectId
-                )
-            ) {
-                return response()->json([
-                    'success' => false,
-                    'message' =>
-                        'هذه المادة غير مسندة للمعلم الحالي.',
-                ], 403);
+            if (!$this->teacherHasSubject($teacher->id, $subjectId)) {
+                return $this->error(
+                    'هذه المادة غير مسندة للمعلم الحالي.'
+                );
             }
 
-            $query->where(
-                'subject_id',
-                $subjectId
-            );
+            $query->where('subject_id', $subjectId);
         }
 
         if ($request->filled('student_id')) {
-            $studentId =
-                (int) $request->student_id;
+            $studentId = (int) $request->student_id;
 
-            if (
-                !$this->teacherCanAccessStudent(
-                    $teacher->id,
-                    $studentId,
-                    $subjectId
-                )
-            ) {
-                return response()->json([
-                    'success' => false,
-                    'message' =>
-                        'غير مصرح لك بالوصول إلى درجات هذا الطالب.',
-                ], 403);
+            if (!$this->teacherCanAccessStudent(
+                $teacher->id,
+                $studentId,
+                $subjectId
+            )) {
+                return $this->error(
+                    'غير مصرح لك بالوصول إلى درجات هذا الطالب.'
+                );
             }
 
-            $query->where(
-                'student_id',
-                $studentId
-            );
+            $query->where('student_id', $studentId);
         }
-
-        $grades = $query
-            ->latest()
-            ->get();
 
         return response()->json([
             'success' => true,
-            'message' =>
-                'تم جلب الدرجات بنجاح.',
-            'data' => $grades,
+            'message' => 'تم جلب الدرجات بنجاح.',
+            'data' => $query->latest()->get(),
         ]);
     }
 
-    // ===============================================================
-    // حفظ درجة جديدة أو تحديث الموجودة
-    // ===============================================================
+    // ==========================================================
+    // إنشاء أو تحديث درجة
+    // ==========================================================
+
     public function store(Request $request)
     {
-        $teacher =
-            $this->getAuthenticatedTeacher(
-                $request
-            );
+        $teacher = $this->getAuthenticatedTeacher($request);
 
         if (!$teacher) {
-            return response()->json([
-                'success' => false,
-                'message' =>
-                    'هذا الحساب غير مرتبط بمعلم.',
-            ], 403);
+            return $this->error('هذا الحساب غير مرتبط بمعلم.');
         }
 
         $validated = $request->validate([
@@ -185,181 +182,174 @@ class GradeController extends Controller
                 'integer',
                 'exists:students,id',
             ],
-
             'subject_id' => [
                 'required',
                 'integer',
                 'exists:subjects,id',
             ],
-
+            'grade_batch_id' => [
+                'required',
+                'integer',
+                'exists:grade_batches,id',
+            ],
             'evaluation_name' => [
                 'required',
                 'string',
                 'max:255',
             ],
-
             'score' => [
                 'required',
                 'numeric',
                 'min:0',
             ],
-
             'max_score' => [
                 'required',
                 'numeric',
                 'gt:0',
             ],
-
             'note' => [
                 'nullable',
                 'string',
             ],
         ]);
 
-        $studentId =
-            (int) $validated['student_id'];
+        $studentId = (int) $validated['student_id'];
+        $subjectId = (int) $validated['subject_id'];
+        $batchId = (int) $validated['grade_batch_id'];
 
-        $subjectId =
-            (int) $validated['subject_id'];
-
-        if (
-            !$this->teacherHasSubject(
-                $teacher->id,
-                $subjectId
-            )
-        ) {
-            return response()->json([
-                'success' => false,
-                'message' =>
-                    'هذه المادة غير مسندة للمعلم الحالي.',
-            ], 403);
+        if (!$this->teacherCanAccessStudent(
+            $teacher->id,
+            $studentId,
+            $subjectId
+        )) {
+            return $this->error(
+                'غير مصرح لك بإدخال درجات لهذا الطالب في هذه المادة.'
+            );
         }
 
-        if (
-            !$this->teacherCanAccessStudent(
-                $teacher->id,
-                $studentId,
-                $subjectId
-            )
-        ) {
-            return response()->json([
-                'success' => false,
-                'message' =>
-                    'غير مصرح لك بإدخال درجات لهذا الطالب في هذه المادة.',
-            ], 403);
+        if ((float) $validated['score'] >
+            (float) $validated['max_score']) {
+            return $this->error(
+                'الدرجة لا يمكن أن تكون أكبر من الدرجة الكلية.',
+                422
+            );
         }
 
-        if (
-            (float) $validated['score'] >
-            (float) $validated['max_score']
+        return DB::transaction(function () use (
+            $teacher,
+            $validated,
+            $studentId,
+            $subjectId,
+            $batchId
         ) {
+            $batch = GradeBatch::query()
+                ->whereKey($batchId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ((int) $batch->teacher_id !== (int) $teacher->id ||
+                (int) $batch->subject_id !== $subjectId) {
+                return $this->error(
+                    'هذا الكشف لا يخص المعلم أو المادة المحددة.'
+                );
+            }
+
+            $student = DB::table('students')
+                ->where('id', $studentId)
+                ->first();
+
+            if (!$student ||
+                (int) $student->section_id !== (int) $batch->section_id) {
+                return $this->error(
+                    'الطالب غير مسجل في شعبة هذا الكشف.'
+                );
+            }
+
+            if (!$this->canEditBatch($batch)) {
+                return $this->error(
+                    $this->batchLockMessage($batch),
+                    423
+                );
+            }
+
+            $existing = Grade::query()
+                ->where('student_id', $studentId)
+                ->where('teacher_id', $teacher->id)
+                ->where('subject_id', $subjectId)
+                ->where('evaluation_name', $validated['evaluation_name'])
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing &&
+                $existing->grade_batch_id !== null &&
+                (int) $existing->grade_batch_id !== $batchId) {
+                return $this->error(
+                    'هذه الدرجة مرتبطة بكشف آخر، ولا يمكن نقلها تلقائيًا.',
+                    422
+                );
+            }
+
+            if ($existing) {
+                $existing->update([
+                    'score' => $validated['score'],
+                    'max_score' => $validated['max_score'],
+                    'note' => $validated['note'] ?? null,
+                    'grade_batch_id' => $batchId,
+                ]);
+
+                $grade = $existing;
+                $created = false;
+            } else {
+                $grade = Grade::create([
+                    'student_id' => $studentId,
+                    'teacher_id' => $teacher->id,
+                    'subject_id' => $subjectId,
+                    'grade_batch_id' => $batchId,
+                    'evaluation_name' => $validated['evaluation_name'],
+                    'score' => $validated['score'],
+                    'max_score' => $validated['max_score'],
+                    'note' => $validated['note'] ?? null,
+                ]);
+
+                $created = true;
+            }
+
+            $this->notifyTeacher(
+                (int) $teacher->user_id,
+                (int) $grade->id,
+                'تم حفظ درجات الطلاب بنجاح.'
+            );
+
+            $grade->load([
+                'student',
+                'teacher',
+                'subject',
+            ]);
+
             return response()->json([
-                'success' => false,
-                'message' =>
-                    'الدرجة لا يمكن أن تكون أكبر من الدرجة الكلية.',
-            ], 422);
-        }
-
-        // ===========================================================
-        // إنشاء الدرجة أو تحديث نفس الدرجة
-        // ===========================================================
-        $grade = Grade::updateOrCreate(
-            [
-                'student_id' =>
-                    $studentId,
-
-                'teacher_id' =>
-                    $teacher->id,
-
-                'subject_id' =>
-                    $subjectId,
-
-                'evaluation_name' =>
-                    $validated['evaluation_name'],
-            ],
-            [
-                'score' =>
-                    $validated['score'],
-
-                'max_score' =>
-                    $validated['max_score'],
-
-                'note' =>
-                    $validated['note'] ?? null,
-            ]
-        );
-
-        $grade->load([
-            'student',
-            'teacher',
-            'subject',
-        ]);
-
-        // ===========================================================
-        // إنشاء إشعار تلقائي للمعلم
-        // ===========================================================
-        Notification::create([
-            'user_id' =>
-                $teacher->user_id,
-
-            'type' =>
-                'grade',
-
-            'title' =>
-                'تحديث الدرجات',
-
-            'body' =>
-                'تم حفظ درجات الطلاب بنجاح.',
-
-            'is_read' =>
-                false,
-
-            'reference_id' =>
-                $grade->id,
-
-            'reference_type' =>
-                'grade',
-        ]);
-
-        return response()->json([
-            'success' => true,
-
-            'message' =>
-                'تم حفظ الدرجة بنجاح.',
-
-            'data' => $grade,
-        ], $grade->wasRecentlyCreated ? 201 : 200);
+                'success' => true,
+                'message' => 'تم حفظ الدرجة بنجاح.',
+                'data' => $grade,
+            ], $created ? 201 : 200);
+        });
     }
 
-    // ===============================================================
+    // ==========================================================
     // عرض درجة واحدة
-    // ===============================================================
-    public function show(
-        Request $request,
-        Grade $grade
-    ) {
-        $teacher =
-            $this->getAuthenticatedTeacher(
-                $request
-            );
+    // ==========================================================
+
+    public function show(Request $request, Grade $grade)
+    {
+        $teacher = $this->getAuthenticatedTeacher($request);
 
         if (!$teacher) {
-            return response()->json([
-                'success' => false,
-                'message' =>
-                    'هذا الحساب غير مرتبط بمعلم.',
-            ], 403);
+            return $this->error('هذا الحساب غير مرتبط بمعلم.');
         }
 
-        if (
-            (int) $grade->teacher_id !==
-            (int) $teacher->id
-        ) {
-            return response()->json([
-                'success' => false,
-                'message' =>
-                    'غير مصرح لك بعرض هذه الدرجة.',
-            ], 403);
+        if ((int) $grade->teacher_id !== (int) $teacher->id) {
+            return $this->error(
+                'غير مصرح لك بعرض هذه الدرجة.'
+            );
         }
 
         $grade->load([
@@ -374,49 +364,32 @@ class GradeController extends Controller
         ]);
     }
 
-    // ===============================================================
+    // ==========================================================
     // تعديل درجة
-    // ===============================================================
-    public function update(
-        Request $request,
-        Grade $grade
-    ) {
-        $teacher =
-            $this->getAuthenticatedTeacher(
-                $request
-            );
+    // ==========================================================
+
+    public function update(Request $request, Grade $grade)
+    {
+        $teacher = $this->getAuthenticatedTeacher($request);
 
         if (!$teacher) {
-            return response()->json([
-                'success' => false,
-                'message' =>
-                    'هذا الحساب غير مرتبط بمعلم.',
-            ], 403);
+            return $this->error('هذا الحساب غير مرتبط بمعلم.');
         }
 
-        if (
-            (int) $grade->teacher_id !==
-            (int) $teacher->id
-        ) {
-            return response()->json([
-                'success' => false,
-                'message' =>
-                    'غير مصرح لك بتعديل هذه الدرجة.',
-            ], 403);
+        if ((int) $grade->teacher_id !== (int) $teacher->id) {
+            return $this->error(
+                'غير مصرح لك بتعديل هذه الدرجة.'
+            );
         }
 
-        if (
-            !$this->teacherCanAccessStudent(
-                $teacher->id,
-                (int) $grade->student_id,
-                (int) $grade->subject_id
-            )
-        ) {
-            return response()->json([
-                'success' => false,
-                'message' =>
-                    'لم تعد هذه المادة والشعبة مسندة للمعلم الحالي.',
-            ], 403);
+        if (!$this->teacherCanAccessStudent(
+            $teacher->id,
+            (int) $grade->student_id,
+            (int) $grade->subject_id
+        )) {
+            return $this->error(
+                'لم تعد هذه المادة والشعبة مسندة للمعلم الحالي.'
+            );
         }
 
         $validated = $request->validate([
@@ -426,147 +399,158 @@ class GradeController extends Controller
                 'string',
                 'max:255',
             ],
-
             'score' => [
                 'sometimes',
                 'required',
                 'numeric',
                 'min:0',
             ],
-
             'max_score' => [
                 'sometimes',
                 'required',
                 'numeric',
                 'gt:0',
             ],
-
             'note' => [
                 'nullable',
                 'string',
             ],
         ]);
 
-        $newScore =
-            $validated['score'] ??
-            $grade->score;
-
-        $newMaxScore =
-            $validated['max_score'] ??
-            $grade->max_score;
-
-        if (
-            (float) $newScore >
-            (float) $newMaxScore
-        ) {
-            return response()->json([
-                'success' => false,
-                'message' =>
-                    'الدرجة لا يمكن أن تكون أكبر من الدرجة الكلية.',
-            ], 422);
-        }
-
-        // ===========================================================
-        // تحديث الدرجة
-        // ===========================================================
-        $grade->update(
+        return DB::transaction(function () use (
+            $grade,
+            $teacher,
             $validated
-        );
+        ) {
+            $current = Grade::query()
+                ->whereKey($grade->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $grade->load([
-            'student',
-            'teacher',
-            'subject',
-        ]);
+            if ($current->grade_batch_id === null) {
+                return $this->error(
+                    'هذه الدرجة غير مرتبطة بكشف درجات، ولا يمكن تعديلها حتى يتم ربطها.',
+                    422
+                );
+            }
 
-        // ===========================================================
-        // إشعار تلقائي بعد تعديل الدرجة
-        // ===========================================================
-        Notification::create([
-            'user_id' =>
-                $teacher->user_id,
+            $batch = GradeBatch::query()
+                ->whereKey($current->grade_batch_id)
+                ->lockForUpdate()
+                ->first();
 
-            'type' =>
-                'grade',
+            if (!$batch) {
+                return $this->error(
+                    'لم يتم العثور على كشف الدرجات المرتبط.',
+                    422
+                );
+            }
 
-            'title' =>
-                'تحديث الدرجات',
+            if (!$this->canEditBatch($batch)) {
+                return $this->error(
+                    $this->batchLockMessage($batch),
+                    423
+                );
+            }
 
-            'body' =>
-                'تم تعديل الدرجة بنجاح.',
+            $newScore = $validated['score'] ?? $current->score;
+            $newMaxScore = $validated['max_score'] ?? $current->max_score;
 
-            'is_read' =>
-                false,
+            if ((float) $newScore > (float) $newMaxScore) {
+                return $this->error(
+                    'الدرجة لا يمكن أن تكون أكبر من الدرجة الكلية.',
+                    422
+                );
+            }
 
-            'reference_id' =>
-                $grade->id,
+            $current->update($validated);
 
-            'reference_type' =>
-                'grade',
-        ]);
-
-        return response()->json([
-            'success' => true,
-
-            'message' =>
-                'تم تعديل الدرجة بنجاح.',
-
-            'data' => $grade,
-        ]);
-    }
-
-    // ===============================================================
-    // حذف درجة
-    // ===============================================================
-    public function destroy(
-        Request $request,
-        Grade $grade
-    ) {
-        $teacher =
-            $this->getAuthenticatedTeacher(
-                $request
+            $this->notifyTeacher(
+                (int) $teacher->user_id,
+                (int) $current->id,
+                'تم تعديل الدرجة بنجاح.'
             );
 
+            $current->load([
+                'student',
+                'teacher',
+                'subject',
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم تعديل الدرجة بنجاح.',
+                'data' => $current,
+            ]);
+        });
+    }
+
+    // ==========================================================
+    // حذف درجة
+    // ==========================================================
+
+    public function destroy(Request $request, Grade $grade)
+    {
+        $teacher = $this->getAuthenticatedTeacher($request);
+
         if (!$teacher) {
-            return response()->json([
-                'success' => false,
-                'message' =>
-                    'هذا الحساب غير مرتبط بمعلم.',
-            ], 403);
+            return $this->error('هذا الحساب غير مرتبط بمعلم.');
         }
 
-        if (
-            (int) $grade->teacher_id !==
-            (int) $teacher->id
-        ) {
-            return response()->json([
-                'success' => false,
-                'message' =>
-                    'غير مصرح لك بحذف هذه الدرجة.',
-            ], 403);
+        if ((int) $grade->teacher_id !== (int) $teacher->id) {
+            return $this->error(
+                'غير مصرح لك بحذف هذه الدرجة.'
+            );
         }
 
-        if (
-            !$this->teacherCanAccessStudent(
-                $teacher->id,
-                (int) $grade->student_id,
-                (int) $grade->subject_id
-            )
-        ) {
-            return response()->json([
-                'success' => false,
-                'message' =>
-                    'لم تعد هذه المادة والشعبة مسندة للمعلم الحالي.',
-            ], 403);
+        if (!$this->teacherCanAccessStudent(
+            $teacher->id,
+            (int) $grade->student_id,
+            (int) $grade->subject_id
+        )) {
+            return $this->error(
+                'لم تعد هذه المادة والشعبة مسندة للمعلم الحالي.'
+            );
         }
 
-        $grade->delete();
+        return DB::transaction(function () use ($grade) {
+            $current = Grade::query()
+                ->whereKey($grade->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        return response()->json([
-            'success' => true,
+            if ($current->grade_batch_id === null) {
+                return $this->error(
+                    'هذه الدرجة غير مرتبطة بكشف درجات، ولا يمكن حذفها حتى يتم ربطها.',
+                    422
+                );
+            }
 
-            'message' =>
-                'تم حذف الدرجة بنجاح.',
-        ]);
+            $batch = GradeBatch::query()
+                ->whereKey($current->grade_batch_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$batch) {
+                return $this->error(
+                    'لم يتم العثور على كشف الدرجات المرتبط.',
+                    422
+                );
+            }
+
+            if (!$this->canEditBatch($batch)) {
+                return $this->error(
+                    $this->batchLockMessage($batch),
+                    423
+                );
+            }
+
+            $current->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم حذف الدرجة بنجاح.',
+            ]);
+        });
     }
 }

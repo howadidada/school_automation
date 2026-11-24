@@ -4,44 +4,93 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
     /**
-     * عرض صفحة تسجيل الدخول.
+     * عرض صفحة تسجيل دخول مدير النظام.
      */
     public function showLogin()
     {
+        if (Auth::check()) {
+
+            if (
+                Auth::user()->is_active &&
+                Auth::user()->hasRole('admin')
+            ) {
+                return redirect()->route('dashboard');
+            }
+
+            Auth::logout();
+
+            request()->session()->invalidate();
+            request()->session()->regenerateToken();
+        }
+
         return view('auth.login');
     }
 
     /**
-     * تنفيذ تسجيل الدخول.
+     * تسجيل دخول مدير النظام فقط.
      */
     public function login(Request $request)
     {
         $credentials = $request->validate([
-            'email' => ['required', 'email'],
-            'password' => ['required'],
+            'email' => [
+                'required',
+                'email',
+            ],
+
+            'password' => [
+                'required',
+                'string',
+            ],
         ]);
 
-        if (Auth::attempt($credentials)) {
-            $request->session()->regenerate();
+        /*
+        |--------------------------------------------------------------------------
+        | السماح للحسابات النشطة فقط
+        |--------------------------------------------------------------------------
+        */
 
-            if (!Auth::user()->is_active) {
-                Auth::logout();
+        $credentials['is_active'] = true;
 
-                return back()->withErrors([
-                    'email' => 'هذا الحساب غير مفعل.',
-                ])->onlyInput('email');
-            }
-
-            return redirect()->route('dashboard');
+        if (!Auth::attempt($credentials)) {
+            throw ValidationException::withMessages([
+                'email' => 'بيانات تسجيل الدخول غير صحيحة أو الحساب غير مفعل.',
+            ]);
         }
 
-        return back()->withErrors([
-            'email' => 'البريد الإلكتروني أو كلمة المرور غير صحيحة.',
-        ])->onlyInput('email');
+        /*
+        |--------------------------------------------------------------------------
+        | السماح لمدير النظام فقط
+        |--------------------------------------------------------------------------
+        */
+
+        if (!Auth::user()->hasRole('admin')) {
+
+            Auth::logout();
+
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            throw ValidationException::withMessages([
+                'email' => 'هذا الحساب غير مخوّل للدخول إلى لوحة مدير النظام.',
+            ]);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | تجديد الجلسة بعد نجاح تسجيل الدخول
+        |--------------------------------------------------------------------------
+        */
+
+        $request->session()->regenerate();
+
+        return redirect()->intended(
+            route('dashboard')
+        );
     }
 
     /**
@@ -52,6 +101,7 @@ class AuthController extends Controller
         Auth::logout();
 
         $request->session()->invalidate();
+
         $request->session()->regenerateToken();
 
         return redirect()->route('login');

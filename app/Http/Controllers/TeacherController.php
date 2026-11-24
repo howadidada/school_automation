@@ -6,10 +6,11 @@ use App\Models\Role;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Services\AccountActivationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Throwable;
 
 class TeacherController extends Controller
 {
@@ -22,6 +23,7 @@ class TeacherController extends Controller
             'user',
             'subject',
         ])
+            ->withCount('assignments')
             ->latest()
             ->get();
 
@@ -45,10 +47,12 @@ class TeacherController extends Controller
     }
 
     // ===============================================================
-    // حفظ معلم جديد
+    // حفظ معلم جديد دون كلمة مرور
     // ===============================================================
-    public function store(Request $request)
-    {
+    public function store(
+        Request $request,
+        AccountActivationService $activationService
+    ) {
         $validated = $request->validate([
             'name' => [
                 'required',
@@ -77,15 +81,9 @@ class TeacherController extends Controller
                 'max:30',
             ],
 
-            'password' => [
-                'required',
-                'string',
-                'min:8',
-                'confirmed',
-            ],
-
             'subject_id' => [
                 'required',
+                'integer',
                 'exists:subjects,id',
             ],
 
@@ -105,79 +103,54 @@ class TeacherController extends Controller
             ],
         ]);
 
-        DB::transaction(function () use ($validated) {
+        /*
+        |--------------------------------------------------------------------------
+        | إنشاء حساب المعلم وبياناته
+        |--------------------------------------------------------------------------
+        |
+        | لا يحدد مدير النظام كلمة المرور.
+        | يتم إنشاء الحساب بحالة انتظار التفعيل.
+        |
+        */
 
-            // =======================================================
-            // جلب دور المعلم
-            // =======================================================
+        $user = DB::transaction(function () use ($validated) {
+
             $teacherRole = Role::where(
                 'name',
                 'teacher'
             )->firstOrFail();
 
-            // =======================================================
-            // إنشاء حساب المستخدم
-            // =======================================================
             $user = new User();
 
-            $user->name =
-                $validated['name'];
+            $user->name = $validated['name'];
+            $user->username = $validated['username'];
+            $user->email = $validated['email'];
+            $user->phone = $validated['phone'] ?? null;
 
-            $user->username =
-                $validated['username'];
+            // المعلم يحدد كلمة المرور بنفسه
+            $user->password = null;
 
-            $user->email =
-                $validated['email'];
+            // الحساب ينتظر التفعيل
+            $user->is_active = false;
 
-            $user->phone =
-                $validated['phone'] ?? null;
-
-            $user->password =
-                Hash::make(
-                    $validated['password']
-                );
-
-            $user->role_id =
-                $teacherRole->id;
-
-            $user->is_active = true;
+            $user->role_id = $teacherRole->id;
 
             $user->save();
 
-            // =======================================================
-            // إنشاء سجل المعلم
-            // =======================================================
             $teacher = new Teacher();
 
-            $teacher->user_id =
-                $user->id;
-
-            $teacher->subject_id =
-                $validated['subject_id'];
-
-            $teacher->education_stage =
-                $validated['education_stage'];
+            $teacher->user_id = $user->id;
+            $teacher->subject_id = $validated['subject_id'];
+            $teacher->education_stage = $validated['education_stage'];
 
             $teacher->specialization =
-                $validated['specialization']
-                ?? null;
+                $validated['specialization'] ?? null;
 
-            /*
-             * الرقم الوظيفي يترك فارغًا أولًا
-             * حتى يتم إنشاء ID للمعلم.
-             */
             $teacher->employee_number = null;
 
             $teacher->save();
 
-            // =======================================================
-            // إنشاء الرقم الوظيفي تلقائيًا
-            //
-            // مثال:
-            // id = 1  -> T-001
-            // id = 2  -> T-002
-            // id = 15 -> T-015
-            // =======================================================
+            // توليد الرقم الوظيفي
             $teacher->employee_number =
                 'T-' . str_pad(
                     (string) $teacher->id,
@@ -187,14 +160,42 @@ class TeacherController extends Controller
                 );
 
             $teacher->save();
+
+            return $user;
         });
 
-        return redirect()
-            ->route('teachers.index')
-            ->with(
-                'success',
-                'تم إضافة المعلم بنجاح ويمكنه الآن تسجيل الدخول باسم المستخدم وكلمة المرور.'
-            );
+        /*
+        |--------------------------------------------------------------------------
+        | إرسال رابط التفعيل
+        |--------------------------------------------------------------------------
+        |
+        | يتم الإرسال بعد حفظ الحساب بنجاح.
+        | إذا فشل البريد، لا نحذف حساب المعلم.
+        |
+        */
+
+        try {
+            $activationService->send($user);
+
+            return redirect()
+                ->route('teachers.index')
+                ->with(
+                    'success',
+                    'تمت إضافة المعلم بنجاح وإرسال رابط التفعيل إلى بريده الإلكتروني.'
+                );
+
+        } catch (Throwable $exception) {
+
+            report($exception);
+
+            return redirect()
+                ->route('teachers.index')
+                ->with(
+                    'error',
+                    'تم حفظ بيانات المعلم بنجاح، لكن تعذر إرسال رابط التفعيل. '
+                    . 'الحساب ما زال بانتظار التفعيل، ويمكن إعادة إرسال الرابط لاحقًا.'
+                );
+        }
     }
 
     // ===============================================================
@@ -202,7 +203,12 @@ class TeacherController extends Controller
     // ===============================================================
     public function edit(Teacher $teacher)
     {
-        $teacher->load('user');
+        $teacher->load([
+            'user',
+            'subject',
+        ]);
+
+        $teacher->loadCount('assignments');
 
         $subjects = Subject::orderBy('name')->get();
 
@@ -264,15 +270,9 @@ class TeacherController extends Controller
                 'max:30',
             ],
 
-            'password' => [
-                'nullable',
-                'string',
-                'min:8',
-                'confirmed',
-            ],
-
             'subject_id' => [
                 'required',
+                'integer',
                 'exists:subjects,id',
             ],
 
@@ -292,65 +292,74 @@ class TeacherController extends Controller
             ],
         ]);
 
-        DB::transaction(
-            function () use (
-                $validated,
-                $teacher
-            ) {
-                // ===================================================
-                // تحديث حساب المستخدم
-                // ===================================================
-                $user = $teacher->user;
+        /*
+        |--------------------------------------------------------------------------
+        | حماية مادة المعلم ومرحلته عند وجود توزيعات
+        |--------------------------------------------------------------------------
+        */
 
-                $user->name =
-                    $validated['name'];
+        $hasAssignments = $teacher->assignments()->exists();
 
-                $user->username =
-                    $validated['username'];
+        $subjectChanged =
+            (int) $teacher->subject_id !==
+            (int) $validated['subject_id'];
 
-                $user->email =
-                    $validated['email'];
+        $stageChanged =
+            $teacher->education_stage !==
+            $validated['education_stage'];
 
-                $user->phone =
-                    $validated['phone'] ?? null;
+        if ($hasAssignments && $subjectChanged) {
+            return back()
+                ->withInput()
+                ->with(
+                    'error',
+                    'لا يمكن تغيير مادة المعلم لأنه مرتبط بتوزيعات تدريسية. '
+                    . 'يجب معالجة توزيعاته الحالية أولًا.'
+                );
+        }
 
-                // ===================================================
-                // تغيير كلمة المرور فقط إذا تم إدخال كلمة جديدة
-                // ===================================================
-                if (
-                    !empty(
-                        $validated['password']
-                    )
-                ) {
-                    $user->password =
-                        Hash::make(
-                            $validated['password']
-                        );
-                }
+        if ($hasAssignments && $stageChanged) {
+            return back()
+                ->withInput()
+                ->with(
+                    'error',
+                    'لا يمكن تغيير المرحلة التعليمية للمعلم لأنه مرتبط بتوزيعات تدريسية. '
+                    . 'يجب معالجة توزيعاته الحالية أولًا.'
+                );
+        }
 
-                $user->save();
+        /*
+        |--------------------------------------------------------------------------
+        | تحديث البيانات
+        |--------------------------------------------------------------------------
+        */
 
-                // ===================================================
-                // تحديث بيانات المعلم
-                // ===================================================
-                $teacher->subject_id =
-                    $validated['subject_id'];
+        DB::transaction(function () use (
+            $validated,
+            $teacher
+        ) {
+            $user = $teacher->user;
 
-                $teacher->education_stage =
-                    $validated['education_stage'];
+            $user->name = $validated['name'];
+            $user->username = $validated['username'];
+            $user->email = $validated['email'];
+            $user->phone = $validated['phone'] ?? null;
 
-                $teacher->specialization =
-                    $validated['specialization']
-                    ?? null;
+            // لا يغير مدير النظام كلمة مرور المعلم
+            $user->save();
 
-                /*
-                 * لا نغيّر employee_number هنا.
-                 * الرقم الوظيفي يبقى ثابتًا للمعلم.
-                 */
+            $teacher->subject_id =
+                $validated['subject_id'];
 
-                $teacher->save();
-            }
-        );
+            $teacher->education_stage =
+                $validated['education_stage'];
+
+            $teacher->specialization =
+                $validated['specialization'] ?? null;
+
+            // الرقم الوظيفي لا يتغير
+            $teacher->save();
+        });
 
         return redirect()
             ->route('teachers.index')
@@ -361,48 +370,160 @@ class TeacherController extends Controller
     }
 
     // ===============================================================
-    // حذف المعلم
+    // إعادة إرسال رابط تفعيل حساب المعلم
     // ===============================================================
-    public function destroy(
-        Teacher $teacher
+    public function resendActivation(
+        Teacher $teacher,
+        AccountActivationService $activationService
     ) {
-        DB::transaction(
-            function () use ($teacher) {
+        $teacher->load('user');
 
-                $teacher->load('user');
+        $user = $teacher->user;
 
-                $user = $teacher->user;
+        if (!$user) {
+            return back()->with(
+                'error',
+                'لا يوجد حساب مستخدم مرتبط بهذا المعلم.'
+            );
+        }
 
-                // ===================================================
-                // حذف إسنادات المعلم
-                // ===================================================
-                $teacher
-                    ->assignments()
-                    ->delete();
+        if (!$activationService->isPendingActivation($user)) {
+            return back()->with(
+                'error',
+                'هذا الحساب لا ينتظر التفعيل، لذلك لا يمكن إرسال رابط تفعيل جديد.'
+            );
+        }
 
-                // ===================================================
-                // حذف سجل المعلم
-                // ===================================================
-                $teacher->delete();
+        try {
+            $activationService->send($user);
 
-                // ===================================================
-                // حذف حساب المستخدم والتوكنات
-                // ===================================================
-                if ($user) {
-                    $user
-                        ->tokens()
-                        ->delete();
+            return back()->with(
+                'success',
+                'تم إرسال رابط تفعيل جديد إلى بريد المعلم الإلكتروني.'
+            );
 
-                    $user->delete();
-                }
+        } catch (Throwable $exception) {
+
+            report($exception);
+
+            return back()->with(
+                'error',
+                'تعذر إرسال رابط التفعيل. يرجى التأكد من إعدادات البريد الإلكتروني والمحاولة لاحقًا.'
+            );
+        }
+    }
+
+    // ===============================================================
+    // تعطيل وإعادة تنشيط حساب المعلم
+    // ===============================================================
+    public function toggleStatus(Teacher $teacher)
+    {
+        $result = DB::transaction(function () use ($teacher) {
+
+            /*
+            |--------------------------------------------------------------------------
+            | جلب حساب المعلم وقفل السجل أثناء التحديث
+            |--------------------------------------------------------------------------
+            */
+
+            $user = User::query()
+                ->where('id', $teacher->user_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$user) {
+                return [
+                    'type' => 'error',
+                    'message' => 'لا يوجد حساب مستخدم مرتبط بهذا المعلم.',
+                ];
             }
-        );
+
+            /*
+            |--------------------------------------------------------------------------
+            | منع تنشيط الحساب قبل إكمال التفعيل
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                !$user->is_active &&
+                $user->password === null
+            ) {
+                return [
+                    'type' => 'error',
+                    'message' => 'هذا المعلم لم يفعّل حسابه بعد. '
+                        . 'يرجى إعادة إرسال رابط التفعيل.',
+                ];
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | تغيير حالة الحساب
+            |--------------------------------------------------------------------------
+            */
+
+            $wasActive = (bool) $user->is_active;
+
+            $user->is_active = !$wasActive;
+
+            $user->save();
+
+            /*
+            |--------------------------------------------------------------------------
+            | إلغاء جميع رموز تسجيل الدخول عند تعطيل الحساب
+            |--------------------------------------------------------------------------
+            |
+            | عند تعطيل المعلم، يتم حذف جميع رموز الدخول
+            | الخاصة به حتى لا يتمكن من استخدام الجلسات السابقة.
+            |
+            | عند إعادة التنشيط، يجب تسجيل الدخول من جديد.
+            |
+            */
+
+            if ($wasActive) {
+
+                $user->tokens()->delete();
+
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | الاحتفاظ بجميع البيانات الأكاديمية
+            |--------------------------------------------------------------------------
+            |
+            | لا يتم حذف المعلم أو تعديل بياناته الأكاديمية.
+            | تبقى المادة والمرحلة والتوزيعات محفوظة.
+            |
+            */
+
+            return [
+                'type' => 'success',
+
+                'message' => $wasActive
+                    ? 'تم تعطيل حساب المعلم وإنهاء جلسات تسجيل الدخول الخاصة به بنجاح، مع الاحتفاظ بجميع بياناته وتوزيعاته التدريسية.'
+                    : 'تمت إعادة تنشيط حساب المعلم بنجاح.',
+            ];
+
+        }, 3);
 
         return redirect()
             ->route('teachers.index')
             ->with(
-                'success',
-                'تم حذف المعلم بنجاح.'
+                $result['type'],
+                $result['message']
+            );
+    }
+
+    // ===============================================================
+    // منع الحذف النهائي للمعلم
+    // ===============================================================
+    public function destroy(Teacher $teacher)
+    {
+        return redirect()
+            ->route('teachers.index')
+            ->with(
+                'error',
+                'الحذف النهائي للمعلمين متوقف لحماية السجلات الأكاديمية. '
+                . 'سيتم استخدام التعطيل وإعادة التنشيط بدلًا من الحذف.'
             );
     }
 }

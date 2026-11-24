@@ -31,7 +31,6 @@ class SubjectController extends Controller
                 'max:255',
                 'unique:subjects,name',
             ],
-
             'description' => [
                 'nullable',
                 'string',
@@ -45,7 +44,7 @@ class SubjectController extends Controller
 
         return redirect()
             ->route('subjects.index')
-            ->with('success', 'تم إضافة المادة الدراسية بنجاح.');
+            ->with('success', 'تمت إضافة المادة الدراسية بنجاح.');
     }
 
     public function edit(Subject $subject)
@@ -60,10 +59,8 @@ class SubjectController extends Controller
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('subjects', 'name')
-                    ->ignore($subject->id),
+                Rule::unique('subjects', 'name')->ignore($subject->id),
             ],
-
             'description' => [
                 'nullable',
                 'string',
@@ -82,12 +79,23 @@ class SubjectController extends Controller
 
     public function destroy(Subject $subject)
     {
+        // منع حذف مادة مرتبطة بمعلمين
         if ($subject->teachers()->exists()) {
             return redirect()
                 ->route('subjects.index')
                 ->with(
                     'error',
-                    'لا يمكن حذف هذه المادة لأنها مرتبطة بمعلم أو أكثر. قم بتغيير مادة المعلمين أولًا.'
+                    'لا يمكن حذف هذه المادة لأنها مرتبطة بمعلم أو أكثر.'
+                );
+        }
+
+        // منع حذف مادة مرتبطة بتوزيعات تدريسية
+        if ($subject->teacherAssignments()->exists()) {
+            return redirect()
+                ->route('subjects.index')
+                ->with(
+                    'error',
+                    'لا يمكن حذف هذه المادة لأنها مرتبطة بتوزيعات تدريسية.'
                 );
         }
 

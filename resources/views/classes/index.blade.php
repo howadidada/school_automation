@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>صلة | الفصول</title>
+    <title>صلة | إدارة الفصول</title>
 
     <style>
         * {
@@ -85,12 +85,14 @@
         .main {
             flex: 1;
             padding: 30px;
+            min-width: 0;
         }
 
         .topbar {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 15px;
             margin-bottom: 25px;
         }
 
@@ -163,6 +165,12 @@
 
         th {
             background: #f9fafb;
+            color: #374151;
+            font-weight: 600;
+        }
+
+        tbody tr:hover {
+            background: #f9fafb;
         }
 
         .actions {
@@ -188,12 +196,57 @@
             padding: 7px 12px;
             border-radius: 7px;
             cursor: pointer;
+            font-size: 14px;
         }
 
         .empty {
             text-align: center;
             padding: 35px;
             color: #6b7280;
+        }
+
+        .stage-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .stage-primary {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .stage-middle {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .stage-secondary {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .stage-empty {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
+        @media (max-width: 768px) {
+            .topbar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .main {
+                padding: 15px;
+            }
+
+            table {
+                min-width: 750px;
+            }
         }
     </style>
 </head>
@@ -210,16 +263,24 @@
 
             <div>
                 <h2>إدارة الفصول</h2>
-                <p>إضافة وتعديل وحذف الفصول ومتابعة الشعب التابعة لها</p>
+                <p>
+                    إضافة وتعديل وحذف الفصول ومتابعة الشعب التابعة لها
+                </p>
             </div>
 
             <div class="buttons">
 
-                <a href="{{ route('sections.index') }}" class="section-btn">
+                <a
+                    href="{{ route('sections.index') }}"
+                    class="section-btn"
+                >
                     عرض الشعب
                 </a>
 
-                <a href="{{ route('classes.create') }}" class="add-btn">
+                <a
+                    href="{{ route('classes.create') }}"
+                    class="add-btn"
+                >
                     + إضافة فصل
                 </a>
 
@@ -244,73 +305,114 @@
             <table>
 
                 <thead>
-                <tr>
-                    <th>#</th>
-                    <th>اسم الفصل</th>
-                    <th>المستوى الدراسي</th>
-                    <th>عدد الشعب</th>
-                    <th>الإجراءات</th>
-                </tr>
+                    <tr>
+                        <th>#</th>
+                        <th>اسم الفصل</th>
+                        <th>المستوى الدراسي</th>
+                        <th>المرحلة الدراسية</th>
+                        <th>عدد الشعب</th>
+                        <th>الإجراءات</th>
+                    </tr>
                 </thead>
 
                 <tbody>
 
-                @forelse($classes as $schoolClass)
+                    @forelse($classes as $schoolClass)
 
-                    <tr>
+                        <tr>
 
-                        <td>{{ $schoolClass->id }}</td>
+                            <td>
+                                {{ $schoolClass->id }}
+                            </td>
 
-                        <td>{{ $schoolClass->name }}</td>
+                            <td>
+                                {{ $schoolClass->name }}
+                            </td>
 
-                        <td>
-                            {{ $schoolClass->grade_level ?? '-' }}
-                        </td>
+                            <td>
+                                {{ $schoolClass->grade_level ?? '-' }}
+                            </td>
 
-                        <td>
-                            {{ $schoolClass->sections_count }}
-                        </td>
+                            <td>
 
-                        <td>
+                                @switch($schoolClass->education_stage)
 
-                            <div class="actions">
+                                    @case('primary')
+                                        <span class="stage-badge stage-primary">
+                                            المرحلة الابتدائية
+                                        </span>
+                                        @break
 
-                                <a
-                                    href="{{ route('classes.edit', $schoolClass) }}"
-                                    class="edit-btn"
-                                >
-                                    تعديل
-                                </a>
+                                    @case('middle')
+                                        <span class="stage-badge stage-middle">
+                                            المرحلة الإعدادية
+                                        </span>
+                                        @break
 
-                                <form
-                                    method="POST"
-                                    action="{{ route('classes.destroy', $schoolClass) }}"
-                                    onsubmit="return confirm('هل أنت متأكد من حذف هذا الفصل؟');"
-                                >
-                                    @csrf
-                                    @method('DELETE')
+                                    @case('secondary')
+                                        <span class="stage-badge stage-secondary">
+                                            المرحلة الثانوية
+                                        </span>
+                                        @break
 
-                                    <button type="submit" class="delete-btn">
-                                        حذف
-                                    </button>
+                                    @default
+                                        <span class="stage-badge stage-empty">
+                                            غير محددة
+                                        </span>
 
-                                </form>
+                                @endswitch
 
-                            </div>
+                            </td>
 
-                        </td>
+                            <td>
+                                {{ $schoolClass->sections_count }}
+                            </td>
 
-                    </tr>
+                            <td>
 
-                @empty
+                                <div class="actions">
 
-                    <tr>
-                        <td colspan="5" class="empty">
-                            لا توجد فصول حاليًا.
-                        </td>
-                    </tr>
+                                    <a
+                                        href="{{ route('classes.edit', $schoolClass) }}"
+                                        class="edit-btn"
+                                    >
+                                        تعديل
+                                    </a>
 
-                @endforelse
+                                    <form
+                                        method="POST"
+                                        action="{{ route('classes.destroy', $schoolClass) }}"
+                                        onsubmit="return confirm('هل أنت متأكد من حذف هذا الفصل؟');"
+                                    >
+
+                                        @csrf
+
+                                        @method('DELETE')
+
+                                        <button
+                                            type="submit"
+                                            class="delete-btn"
+                                        >
+                                            حذف
+                                        </button>
+
+                                    </form>
+
+                                </div>
+
+                            </td>
+
+                        </tr>
+
+                    @empty
+
+                        <tr>
+                            <td colspan="6" class="empty">
+                                لا توجد فصول حاليًا.
+                            </td>
+                        </tr>
+
+                    @endforelse
 
                 </tbody>
 

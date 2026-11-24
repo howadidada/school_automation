@@ -131,16 +131,19 @@
             font-weight: 600;
         }
 
-        input {
+        input,
+        select {
             width: 100%;
             padding: 11px 12px;
             border: 1px solid #d1d5db;
             border-radius: 8px;
             outline: none;
             font-size: 14px;
+            background: white;
         }
 
-        input:focus {
+        input:focus,
+        select:focus {
             border-color: #4f46e5;
         }
 
@@ -229,6 +232,41 @@
                         value="{{ old('grade_level') }}"
                         placeholder="مثال: أول ابتدائي"
                     >
+                </div>
+
+                <div class="form-group">
+                    <label for="education_stage">المرحلة الدراسية</label>
+
+                    <select
+                        id="education_stage"
+                        name="education_stage"
+                        required
+                    >
+                        <option value="">
+                            -- اختاري المرحلة الدراسية --
+                        </option>
+
+                        <option
+                            value="primary"
+                            {{ old('education_stage') == 'primary' ? 'selected' : '' }}
+                        >
+                            المرحلة الابتدائية
+                        </option>
+
+                        <option
+                            value="middle"
+                            {{ old('education_stage') == 'middle' ? 'selected' : '' }}
+                        >
+                            المرحلة الإعدادية
+                        </option>
+
+                        <option
+                            value="secondary"
+                            {{ old('education_stage') == 'secondary' ? 'selected' : '' }}
+                        >
+                            المرحلة الثانوية
+                        </option>
+                    </select>
                 </div>
 
                 <button type="submit" class="save-btn">

@@ -85,6 +85,7 @@
 
         .main {
             flex: 1;
+            min-width: 0;
             padding: 30px;
         }
 
@@ -92,6 +93,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 15px;
             margin-bottom: 25px;
         }
 
@@ -110,6 +112,7 @@
             text-decoration: none;
             padding: 11px 18px;
             border-radius: 9px;
+            white-space: nowrap;
         }
 
         .alert {
@@ -127,6 +130,152 @@
             background: #fee2e2;
             color: #991b1b;
         }
+
+        /* ========================================
+           بطاقات إحصائيات المستخدمين
+        ======================================== */
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 18px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background: #ffffff;
+            border-radius: 14px;
+            padding: 22px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+            border-right: 4px solid #111827;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 7px 18px rgba(0,0,0,0.08);
+        }
+
+        .stat-card h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #6b7280;
+            margin-bottom: 14px;
+        }
+
+        .stat-card .stat-number {
+            font-size: 30px;
+            font-weight: 700;
+            color: #111827;
+        }
+
+        .stat-total {
+            border-right-color: #6366f1;
+        }
+
+        .stat-active {
+            border-right-color: #22c55e;
+        }
+
+        .stat-inactive {
+            border-right-color: #ef4444;
+        }
+
+        .stat-pending {
+            border-right-color: #f59e0b;
+        }
+
+        /* ========================================
+           البحث والتصفية
+        ======================================== */
+
+        .filter-box {
+            background: white;
+            padding: 22px;
+            border-radius: 15px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+            margin-bottom: 22px;
+        }
+
+        .filter-title {
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 18px;
+        }
+
+        .filter-form {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr auto auto;
+            gap: 12px;
+            align-items: end;
+        }
+
+        .filter-field {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            min-width: 0;
+        }
+
+        .filter-field label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .filter-field input,
+        .filter-field select {
+            width: 100%;
+            height: 42px;
+            padding: 9px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: white;
+            color: #1f2937;
+            font-size: 14px;
+        }
+
+        .filter-field input:focus,
+        .filter-field select:focus {
+            outline: none;
+            border-color: #6366f1;
+        }
+
+        .search-btn,
+        .reset-btn {
+            height: 42px;
+            padding: 0 17px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .search-btn {
+            background: #111827;
+            color: white;
+            border: none;
+        }
+
+        .reset-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #e5e7eb;
+            text-decoration: none;
+        }
+
+        .results-info {
+            color: #6b7280;
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+
+        /* ========================================
+           جدول المستخدمين
+        ======================================== */
 
         .table-box {
             background: white;
@@ -150,6 +299,7 @@
 
         th {
             background: #f9fafb;
+            white-space: nowrap;
         }
 
         .role-badge {
@@ -161,23 +311,38 @@
             font-size: 12px;
         }
 
-        .status-active {
+        /* ========================================
+           حالات الحساب
+        ======================================== */
+
+        .status-active,
+        .status-inactive,
+        .status-pending {
             display: inline-block;
-            background: #dcfce7;
-            color: #166534;
             padding: 5px 10px;
             border-radius: 20px;
             font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .status-active {
+            background: #dcfce7;
+            color: #166534;
         }
 
         .status-inactive {
-            display: inline-block;
             background: #fee2e2;
             color: #991b1b;
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 12px;
         }
+
+        .status-pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        /* ========================================
+           أزرار الإجراءات
+        ======================================== */
 
         .actions {
             display: flex;
@@ -186,31 +351,52 @@
             align-items: center;
         }
 
-        .edit-btn {
+        .actions form {
+            margin: 0;
+        }
+
+        .edit-btn,
+        .disable-btn,
+        .enable-btn,
+        .resend-btn {
             display: inline-block;
-            background: #e0e7ff;
-            color: #3730a3;
-            text-decoration: none;
             padding: 7px 12px;
             border-radius: 7px;
+            font-size: 13px;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+        .edit-btn {
+            background: #e0e7ff;
+            color: #3730a3;
         }
 
         .disable-btn {
             background: #fee2e2;
             color: #991b1b;
-            border: none;
-            padding: 7px 12px;
-            border-radius: 7px;
-            cursor: pointer;
         }
 
         .enable-btn {
             background: #dcfce7;
             color: #166534;
-            border: none;
-            padding: 7px 12px;
-            border-radius: 7px;
-            cursor: pointer;
+        }
+
+        .resend-btn {
+            background: #dbeafe;
+            color: #1d4ed8;
+            font-weight: 600;
+        }
+
+        .resend-btn:hover {
+            background: #bfdbfe;
+        }
+
+        .resend-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
 
         .special-user {
@@ -227,6 +413,55 @@
             padding: 35px;
             color: #6b7280;
         }
+
+        .pagination-area {
+            margin-top: 20px;
+        }
+
+        /* ========================================
+           توافق الواجهة مع الشاشات
+        ======================================== */
+
+        @media (max-width: 1100px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .filter-form {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main {
+                padding: 16px;
+            }
+
+            .topbar {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .topbar h2 {
+                font-size: 22px;
+            }
+
+            .filter-form {
+                grid-template-columns: 1fr;
+            }
+
+            th,
+            td {
+                padding: 12px;
+                font-size: 13px;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 
@@ -237,6 +472,8 @@
     @include('partials.sidebar')
 
     <main class="main">
+
+        <!-- عنوان الصفحة -->
 
         <div class="topbar">
 
@@ -253,6 +490,8 @@
             </a>
 
         </div>
+
+        <!-- رسائل النجاح والخطأ -->
 
         @if(session('success'))
             <div class="alert success">
@@ -276,20 +515,195 @@
             </div>
         @endif
 
+        {{-- ========================================
+             بطاقات إحصائيات المستخدمين
+        ======================================== --}}
+
+        <div class="stats-grid">
+
+            <!-- إجمالي المستخدمين -->
+
+            <div class="stat-card stat-total">
+                <h3>👥 إجمالي المستخدمين</h3>
+
+                <div class="stat-number">
+                    {{ $totalUsers }}
+                </div>
+            </div>
+
+            <!-- الحسابات النشطة -->
+
+            <div class="stat-card stat-active">
+                <h3>🟢 الحسابات النشطة</h3>
+
+                <div class="stat-number">
+                    {{ $activeUsers }}
+                </div>
+            </div>
+
+            <!-- الحسابات المعطلة -->
+
+            <div class="stat-card stat-inactive">
+                <h3>🔴 الحسابات المعطّلة</h3>
+
+                <div class="stat-number">
+                    {{ $inactiveUsers }}
+                </div>
+            </div>
+
+            <!-- الحسابات التي تنتظر التفعيل -->
+
+            <div class="stat-card stat-pending">
+                <h3>🟠 بانتظار التفعيل</h3>
+
+                <div class="stat-number">
+                    {{ $pendingUsers }}
+                </div>
+            </div>
+
+        </div>
+
+        {{-- ========================================
+             شريط البحث والتصفية
+        ======================================== --}}
+
+        <section class="filter-box">
+
+            <h3 class="filter-title">
+                البحث والتصفية
+            </h3>
+
+            <form
+                method="GET"
+                action="{{ route('users.index') }}"
+                class="filter-form"
+            >
+
+                <!-- البحث بالاسم أو البريد -->
+
+                <div class="filter-field">
+                    <label for="search">
+                        الاسم أو البريد الإلكتروني
+                    </label>
+
+                    <input
+                        type="search"
+                        id="search"
+                        name="search"
+                        value="{{ request('search') }}"
+                        placeholder="ابحث عن مستخدم..."
+                        maxlength="255"
+                    >
+                </div>
+
+                <!-- التصفية حسب الدور -->
+
+                <div class="filter-field">
+                    <label for="role_id">
+                        الدور الوظيفي
+                    </label>
+
+                    <select id="role_id" name="role_id">
+
+                        <option value="">
+                            جميع الأدوار
+                        </option>
+
+                        @foreach($roles as $role)
+
+                            <option
+                                value="{{ $role->id }}"
+                                @selected(
+                                    (string) request('role_id') ===
+                                    (string) $role->id
+                                )
+                            >
+                                {{ $role->name }}
+                            </option>
+
+                        @endforeach
+
+                    </select>
+                </div>
+
+                <!-- التصفية حسب الحالة -->
+
+                <div class="filter-field">
+                    <label for="status">
+                        حالة الحساب
+                    </label>
+
+                    <select id="status" name="status">
+
+                        <option value="">
+                            جميع الحالات
+                        </option>
+
+                        <option
+                            value="active"
+                            @selected(request('status') === 'active')
+                        >
+                            نشط
+                        </option>
+
+                        <option
+                            value="inactive"
+                            @selected(request('status') === 'inactive')
+                        >
+                            معطّل
+                        </option>
+
+                        <option
+                            value="pending"
+                            @selected(request('status') === 'pending')
+                        >
+                            بانتظار التفعيل
+                        </option>
+
+                    </select>
+                </div>
+
+                <!-- أزرار البحث -->
+
+                <button type="submit" class="search-btn">
+                    بحث
+                </button>
+
+                <a
+                    href="{{ route('users.index') }}"
+                    class="reset-btn"
+                >
+                    إعادة ضبط
+                </a>
+
+            </form>
+
+        </section>
+
+        <!-- عدد نتائج البحث -->
+
+        <div class="results-info">
+            عدد النتائج المطابقة: {{ $users->total() }}
+        </div>
+
+        {{-- ========================================
+             جدول المستخدمين
+        ======================================== --}}
+
         <div class="table-box">
 
             <table>
 
                 <thead>
-                <tr>
-                    <th>#</th>
-                    <th>الاسم</th>
-                    <th>البريد الإلكتروني</th>
-                    <th>رقم الهاتف</th>
-                    <th>الدور</th>
-                    <th>الحالة</th>
-                    <th>الإجراءات</th>
-                </tr>
+                    <tr>
+                        <th>#</th>
+                        <th>الاسم</th>
+                        <th>البريد الإلكتروني</th>
+                        <th>رقم الهاتف</th>
+                        <th>الدور</th>
+                        <th>الحالة</th>
+                        <th>الإجراءات</th>
+                    </tr>
                 </thead>
 
                 <tbody>
@@ -300,9 +714,40 @@
                         'student',
                         'parent',
                     ];
+
+                    $allowedRoles = [
+                        'admin',
+                        'supervisor',
+                        'principal',
+                        'vice_principal',
+                    ];
                 @endphp
 
                 @forelse($users as $user)
+
+                    @php
+                        $isPendingActivation =
+                            !$user->is_active &&
+                            $user->password === null;
+
+                        $isSpecialRole =
+                            $user->role &&
+                            in_array(
+                                $user->role->name,
+                                $specialRoles,
+                                true
+                            );
+
+                        $canResendActivation =
+                            $isPendingActivation &&
+                            $user->role &&
+                            in_array(
+                                $user->role->name,
+                                $allowedRoles,
+                                true
+                            ) &&
+                            !empty($user->email);
+                    @endphp
 
                     <tr>
 
@@ -336,10 +781,16 @@
                                     نشط
                                 </span>
 
+                            @elseif($isPendingActivation)
+
+                                <span class="status-pending">
+                                    بانتظار التفعيل
+                                </span>
+
                             @else
 
                                 <span class="status-inactive">
-                                    معطل
+                                    معطّل
                                 </span>
 
                             @endif
@@ -350,14 +801,9 @@
 
                             <div class="actions">
 
-                                @if(
-                                    $user->role &&
-                                    in_array(
-                                        $user->role->name,
-                                        $specialRoles,
-                                        true
-                                    )
-                                )
+                                <!-- تعديل المستخدم -->
+
+                                @if($isSpecialRole)
 
                                     <span class="special-user">
                                         إدارة من الصفحة المخصصة
@@ -374,18 +820,42 @@
 
                                 @endif
 
+                                <!-- إعادة إرسال رابط التفعيل -->
 
-                                @if(auth()->id() !== $user->id)
+                                @if($canResendActivation)
 
                                     <form
                                         method="POST"
-                                        action="{{ route('users.toggle-status', $user) }}"
+                                        action="{{ route('users.resend-activation', $user) }}"
+                                        class="resend-activation-form"
                                     >
 
                                         @csrf
-                                        @method('PATCH')
 
-                                        @if($user->is_active)
+                                        <button
+                                            type="submit"
+                                            class="resend-btn"
+                                        >
+                                            إعادة إرسال رابط التفعيل
+                                        </button>
+
+                                    </form>
+
+                                @endif
+
+                                <!-- تفعيل أو تعطيل الحساب -->
+
+                                @if(auth()->id() !== $user->id)
+
+                                    @if($user->is_active)
+
+                                        <form
+                                            method="POST"
+                                            action="{{ route('users.toggle-status', $user) }}"
+                                        >
+
+                                            @csrf
+                                            @method('PATCH')
 
                                             <button
                                                 type="submit"
@@ -395,7 +865,17 @@
                                                 تعطيل
                                             </button>
 
-                                        @else
+                                        </form>
+
+                                    @elseif(!$isPendingActivation)
+
+                                        <form
+                                            method="POST"
+                                            action="{{ route('users.toggle-status', $user) }}"
+                                        >
+
+                                            @csrf
+                                            @method('PATCH')
 
                                             <button
                                                 type="submit"
@@ -405,9 +885,9 @@
                                                 تفعيل
                                             </button>
 
-                                        @endif
+                                        </form>
 
-                                    </form>
+                                    @endif
 
                                 @else
 
@@ -427,7 +907,7 @@
 
                     <tr>
                         <td colspan="7" class="empty">
-                            لا يوجد مستخدمون حاليًا.
+                            لا توجد نتائج مطابقة للبحث أو التصفية.
                         </td>
                     </tr>
 
@@ -439,9 +919,56 @@
 
         </div>
 
+        <!-- ترقيم الصفحات -->
+
+        @if($users->hasPages())
+
+            <div class="pagination-area">
+                {{ $users->links() }}
+            </div>
+
+        @endif
+
     </main>
 
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+
+        const forms = document.querySelectorAll(
+            '.resend-activation-form'
+        );
+
+        forms.forEach(function (form) {
+
+            form.addEventListener('submit', function (event) {
+
+                const confirmed = confirm(
+                    'هل تريد إعادة إرسال رابط التفعيل إلى البريد الإلكتروني لهذا المستخدم؟\n\n' +
+                    'سيتم إنشاء رابط جديد، ولن يعود الرابط السابق صالحًا.'
+                );
+
+                if (!confirmed) {
+                    event.preventDefault();
+                    return;
+                }
+
+                const button = form.querySelector(
+                    'button[type="submit"]'
+                );
+
+                if (button) {
+                    button.disabled = true;
+                    button.textContent = 'جارٍ الإرسال...';
+                }
+
+            });
+
+        });
+
+    });
+</script>
 
 </body>
 </html>

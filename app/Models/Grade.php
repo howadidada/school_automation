@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Grade extends Model
 {
     protected $fillable = [
+        'grade_batch_id',
         'student_id',
         'teacher_id',
         'subject_id',
@@ -22,27 +23,26 @@ class Grade extends Model
         'max_score' => 'decimal:2',
     ];
 
-    /**
-     * الطالب صاحب الدرجة
-     */
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class);
     }
 
-    /**
-     * المعلم الذي أدخل الدرجة
-     */
     public function teacher(): BelongsTo
     {
         return $this->belongsTo(Teacher::class);
     }
 
-    /**
-     * المادة الخاصة بالدرجة
-     */
     public function subject(): BelongsTo
     {
         return $this->belongsTo(Subject::class);
+    }
+
+    public function batch(): BelongsTo
+    {
+        return $this->belongsTo(
+            GradeBatch::class,
+            'grade_batch_id'
+        );
     }
 }
