@@ -696,3 +696,25 @@ Route::middleware(['auth', 'admin'])->group(function () {
     });
 
 });
+// ==========================================================
+// الإعدادات الأكاديمية - مدير النظام
+// ==========================================================
+
+Route::middleware(['auth', 'admin'])->group(function () {
+
+    Route::get(
+        '/academic-settings',
+        [\App\Http\Controllers\AcademicSettingController::class, 'index']
+    )->name('academic-settings.index');
+
+    Route::post(
+        '/academic-settings',
+        [\App\Http\Controllers\AcademicSettingController::class, 'store']
+    )->name('academic-settings.store');
+
+    Route::post(
+        '/academic-settings/{academicSetting}/activate',
+        [\App\Http\Controllers\AcademicSettingController::class, 'activate']
+    )->name('academic-settings.activate');
+
+});

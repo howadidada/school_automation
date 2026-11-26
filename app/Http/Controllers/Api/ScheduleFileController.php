@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Storage;
 class ScheduleFileController extends Controller
 {
     /**
-     * جلب ملفات الجدول الخاصة بشعب المعلم.
+     * جلب الجداول الدراسية الخاصة بالمعلم.
      */
     public function index(Request $request)
     {
@@ -24,9 +24,7 @@ class ScheduleFileController extends Controller
             ], 401);
         }
 
-        // ==========================================================
-        // جلب المعلم المرتبط بالمستخدم
-        // ==========================================================
+        // جلب المعلم المرتبط بالحساب الحالي
         $teacher = DB::table('teachers')
             ->where('user_id', $user->id)
             ->select('id')
@@ -40,9 +38,7 @@ class ScheduleFileController extends Controller
             ], 404);
         }
 
-        // ==========================================================
         // جلب الشعب المسندة للمعلم
-        // ==========================================================
         $sectionIds = DB::table('teacher_assignments')
             ->where('teacher_id', $teacher->id)
             ->pluck('section_id')
@@ -50,37 +46,41 @@ class ScheduleFileController extends Controller
             ->unique()
             ->values();
 
-        if ($sectionIds->isEmpty()) {
-            return response()->json([
-                'success' => true,
-                'message' => 'لا توجد شعب مسندة لهذا المعلم.',
-                'data' => [],
-            ]);
-        }
-
-        // ==========================================================
-        // جلب ملفات الجدول الخاصة بشعب المعلم
-        // ==========================================================
+        // جلب الجداول المسموح للمعلم بالاطلاع عليها
         $scheduleFiles = DB::table('schedule_files as sf')
-            ->join(
+            ->leftJoin(
                 'sections as s',
                 's.id',
                 '=',
                 'sf.section_id'
             )
-            ->join(
+            ->leftJoin(
                 'school_classes as sc',
                 'sc.id',
                 '=',
                 's.school_class_id'
             )
-            ->whereIn(
-                'sf.section_id',
-                $sectionIds
-            )
+            ->where(function ($query) use ($teacher, $sectionIds) {
+
+                // الجدول الدراسي الخاص بالمعلم
+                $query->where(function ($own) use ($teacher) {
+                    $own->where('sf.type', 'teacher_schedule')
+                        ->where('sf.teacher_id', $teacher->id);
+                })
+
+                // جداول الطلاب والاختبارات للشعب المسندة
+                ->orWhere(function ($shared) use ($sectionIds) {
+                    $shared->whereIn('sf.type', [
+                        'student_schedule',
+                        'exam_schedule',
+                    ])
+                    ->whereIn('sf.section_id', $sectionIds);
+                });
+            })
             ->select(
                 'sf.id',
                 'sf.title',
+                'sf.type',
                 'sf.file_path',
                 'sf.section_id',
                 'sf.created_at',
@@ -91,9 +91,7 @@ class ScheduleFileController extends Controller
             ->orderByDesc('sf.created_at')
             ->get();
 
-        // ==========================================================
         // تجهيز البيانات لتطبيق Flutter
-        // ==========================================================
         $data = $scheduleFiles->map(function ($file) {
 
             $extension = strtolower(
@@ -108,6 +106,8 @@ class ScheduleFileController extends Controller
 
                 'title' => $file->title,
 
+                'type' => $file->type,
+
                 'class' => [
                     'id' => $file->class_id,
                     'name' => $file->class_name,
@@ -120,11 +120,11 @@ class ScheduleFileController extends Controller
 
                 'file_type' => $extension,
 
-                'file_url' =>
-                    'http://10.0.2.2:8000/api/teacher/schedule-files/'
-                    . $file->id
-                    . '/file',
-
+              'file_url' => url(
+             '/api/teacher/schedule-files/'
+             . $file->id
+             . '/file'
+              ),
                 'created_at' => $file->created_at,
             ];
         })->values();
@@ -137,7 +137,7 @@ class ScheduleFileController extends Controller
     }
 
     /**
-     * جلب ملف الجدول كـ Base64 داخل JSON.
+     * عرض ملف الجدول الدراسي.
      */
     public function show(Request $request, $id)
     {
@@ -150,9 +150,7 @@ class ScheduleFileController extends Controller
             ], 401);
         }
 
-        // ==========================================================
-        // جلب المعلم المرتبط بالمستخدم
-        // ==========================================================
+        // التحقق من حساب المعلم
         $teacher = DB::table('teachers')
             ->where('user_id', $user->id)
             ->select('id')
@@ -165,9 +163,7 @@ class ScheduleFileController extends Controller
             ], 404);
         }
 
-        // ==========================================================
-        // جلب سجل ملف الجدول
-        // ==========================================================
+        // جلب ملف الجدول
         $scheduleFile = DB::table('schedule_files')
             ->where('id', $id)
             ->first();
@@ -179,16 +175,25 @@ class ScheduleFileController extends Controller
             ], 404);
         }
 
-        // ==========================================================
-        // التأكد أن المعلم مرتبط بالشعبة الخاصة بهذا الجدول
-        // ==========================================================
-        $hasAccess = DB::table('teacher_assignments')
-            ->where('teacher_id', $teacher->id)
-            ->where(
-                'section_id',
-                $scheduleFile->section_id
-            )
-            ->exists();
+        // التحقق من صلاحية المعلم لعرض الجدول
+        $hasAccess = false;
+
+        if ($scheduleFile->type === 'teacher_schedule') {
+
+            $hasAccess =
+                (int) $scheduleFile->teacher_id
+                === (int) $teacher->id;
+
+        } elseif (in_array($scheduleFile->type, [
+            'student_schedule',
+            'exam_schedule',
+        ], true)) {
+
+            $hasAccess = DB::table('teacher_assignments')
+                ->where('teacher_id', $teacher->id)
+                ->where('section_id', $scheduleFile->section_id)
+                ->exists();
+        }
 
         if (!$hasAccess) {
             return response()->json([
@@ -197,9 +202,7 @@ class ScheduleFileController extends Controller
             ], 403);
         }
 
-        // ==========================================================
-        // التأكد من وجود مسار الملف
-        // ==========================================================
+        // التحقق من مسار الملف
         if (empty($scheduleFile->file_path)) {
             return response()->json([
                 'success' => false,
@@ -207,25 +210,24 @@ class ScheduleFileController extends Controller
             ], 404);
         }
 
-        // ==========================================================
-        // التأكد من وجود الملف فعلياً
-        // ==========================================================
-        if (
-            !Storage::disk('public')->exists(
-                $scheduleFile->file_path
-            )
-        ) {
-            return response()->json([
-                'success' => false,
-                'message' => 'ملف الجدول غير موجود على الخادم.',
-            ], 404);
-        }
-
         try {
 
-            // ======================================================
+            // تحديد مكان تخزين ملف الجدول الدراسي
+           $disk = Storage::disk('local');
+
+         if (!$disk->exists($scheduleFile->file_path)) {
+         $disk = Storage::disk('public');
+}
+
+            // التحقق من وجود الملف
+            if (!$disk->exists($scheduleFile->file_path)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'ملف الجدول غير موجود على الخادم.',
+                ], 404);
+            }
+
             // معرفة امتداد الملف
-            // ======================================================
             $extension = strtolower(
                 pathinfo(
                     $scheduleFile->file_path,
@@ -233,16 +235,14 @@ class ScheduleFileController extends Controller
                 )
             );
 
-            // ======================================================
             // تحديد نوع الملف
-            // ======================================================
             $mimeType = match ($extension) {
+
                 'pdf' => 'application/pdf',
 
                 'png' => 'image/png',
 
-                'jpg',
-                'jpeg' => 'image/jpeg',
+                'jpg', 'jpeg' => 'image/jpeg',
 
                 default => null,
             };
@@ -254,82 +254,54 @@ class ScheduleFileController extends Controller
                 ], 422);
             }
 
-            // ======================================================
-            // قراءة الملف
-            // ======================================================
-            $contents = Storage::disk('public')->get(
+            // قراءة محتوى الملف
+            $contents = $disk->get(
                 $scheduleFile->file_path
             );
 
-            if (
-                $contents === null ||
-                $contents === ''
-            ) {
+            if ($contents === null || $contents === '') {
                 return response()->json([
                     'success' => false,
                     'message' => 'ملف الجدول فارغ.',
                 ], 422);
             }
 
-            // ======================================================
-            // الحجم الحقيقي للملف قبل Base64
-            // ======================================================
+            // حساب الحجم الحقيقي للملف
             $fileSize = strlen($contents);
 
             if ($fileSize <= 0) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'ملف الجدول فارغ أو غير صالح.',
+                    'message' => 'ملف الجدول غير صالح.',
                 ], 422);
             }
 
-            // ======================================================
             // تحويل الملف إلى Base64
-            // ======================================================
-            $base64File = base64_encode(
-                $contents
-            );
+            $base64File = base64_encode($contents);
 
-            if (empty($base64File)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'تعذر تجهيز ملف الجدول.',
-                ], 500);
-            }
-
-            // ======================================================
-            // إرجاع الملف داخل JSON
-            // ======================================================
             return response()->json([
                 'success' => true,
 
-                'message' =>
-                    'تم جلب ملف الجدول بنجاح.',
+                'message' => 'تم جلب ملف الجدول بنجاح.',
 
                 'data' => [
-                    'mime_type' =>
-                        $mimeType,
+                    'mime_type' => $mimeType,
 
-                    'extension' =>
-                        $extension,
+                    'extension' => $extension,
 
-                    // الحجم الحقيقي للملف
-                    'file_size' =>
-                        $fileSize,
+                    'file_size' => $fileSize,
 
-                    // الملف Base64
-                    'file_data' =>
-                        $base64File,
+                    'file_data' => $base64File,
                 ],
             ]);
 
         } catch (\Throwable $e) {
 
+            report($e);
+
             return response()->json([
                 'success' => false,
-
-                'message' =>
-                    'حدث خطأ أثناء قراءة ملف الجدول.',
+                'message' => 'حدث خطأ أثناء قراءة ملف الجدول.',
             ], 500);
         }
     }

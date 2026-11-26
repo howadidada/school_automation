@@ -171,7 +171,12 @@
         >
             الإعلانات المدرسية
         </a>
-
+<a
+    href="{{ route('academic-settings.index') }}"
+    class="menu-item {{ request()->routeIs('academic-settings.*') ? 'active' : '' }}"
+>
+    الإعدادات الأكاديمية
+</a>
     </nav>
 
     {{-- =====================================================
